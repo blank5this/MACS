@@ -73,7 +73,7 @@ class CalculatorTool:
                 "success": True,
             }
 
-        except Exception as e:
+        except (SyntaxError, ValueError, ZeroDivisionError, TypeError, ArithmeticError) as e:
             error_result = {
                 "expression": expression,
                 "error": str(e),
