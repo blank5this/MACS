@@ -21,7 +21,7 @@ from ..agents.planner import PlannerAgent
 from ..agents.executor import ExecutorAgent
 from ..agents.reviewer import ReviewerAgent
 from .claude import ClaudeAgentMixin
-from .openai_compatible import MiniMaxAgentMixin
+from .openai_compatible import MiniMaxAgentMixin, TimeoutError as LLMTimeoutError, RateLimitError as LLMRateLimitError
 from .base import LLMProvider
 
 
@@ -309,8 +309,7 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
             if response.tool_calls and self._tool_registry:
                 tool_results = []
                 for tc in response.tool_calls:
-                    import json as _json
-                    args = tc["input"] if isinstance(tc["input"], dict) else _json.loads(tc["input"])
+                    args = tc["input"] if isinstance(tc["input"], dict) else json.loads(tc["input"])
                     tr = await self._tool_registry.invoke(tc["name"], **args)
                     tool_results.append({"tool": tc["name"], "result": tr.to_dict()})
                 result_data["tool_calls"] = tool_results
@@ -325,7 +324,7 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
             result_data.setdefault("description", task_text)
             return result_data
 
-        except TimeoutError as e:
+        except LLMTimeoutError as e:
             # LLM timeout - try fallback or partial result
             logger.warning(f"LLM timeout for task: {e}")
             return {
@@ -334,7 +333,7 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
                 "description": task_text,
                 "fallback": True,
             }
-        except RateLimitError as e:
+        except LLMRateLimitError as e:
             # Rate limit - could implement backoff here
             logger.warning(f"Rate limit hit: {e}")
             return {

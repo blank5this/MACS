@@ -1,4 +1,4 @@
-"""Decentralized collaboration mode (peer-to-peer协商)."""
+"""Decentralized collaboration mode (peer-to-peer voting/consensus)."""
 
 from typing import Any, Dict, List, Optional, Callable
 from dataclasses import dataclass, field
@@ -53,10 +53,10 @@ class DecentralizedMode(CollaborationMode):
     4. No single leader controls the process
 
     Flow:
-    User Input → [Agent₁] ↔ [Agent₂] ↔ [Agent₃] (peer-to-peer)
-                           ↓         ↓         ↓
-                        [投票/共识机制]
-                           ↓
+    User Input → [Agent1] <-> [Agent2] <-> [Agent3] (peer-to-peer)
+                           v         v         v
+                        [Voting/Consensus]
+                           v
                        Final Output
     """
 

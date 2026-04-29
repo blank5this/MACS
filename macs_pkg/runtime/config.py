@@ -6,6 +6,8 @@ from enum import Enum
 import os
 from pathlib import Path
 
+from ..collaboration.base import CollaborationConfig as BaseCollaborationConfig
+
 
 class ConfigSource(Enum):
     """Configuration source priority."""
@@ -28,23 +30,6 @@ class AgentConfig:
 
 
 @dataclass
-class CollaborationConfig:
-    """Configuration for collaboration settings."""
-    default_mode: str = "hierarchical"
-    hierarchical: Dict[str, Any] = field(default_factory=lambda: {
-        "max_iterations": 10,
-        "enable_review": True,
-    })
-    decentralized: Dict[str, Any] = field(default_factory=lambda: {
-        "consensus_threshold": 0.5,
-        "max_rounds": 5,
-    })
-    pipeline: Dict[str, Any] = field(default_factory=lambda: {
-        "stop_on_error": True,
-    })
-
-
-@dataclass
 class MACSConfig:
     """Main configuration class for MACS."""
     # Runtime settings
@@ -57,7 +42,7 @@ class MACSConfig:
     default_timeout: Optional[float] = 60.0
 
     # Collaboration
-    collaboration: CollaborationConfig = field(default_factory=CollaborationConfig)
+    collaboration: BaseCollaborationConfig = field(default_factory=BaseCollaborationConfig)
 
     # Agents
     agents: List[AgentConfig] = field(default_factory=list)
@@ -86,7 +71,12 @@ class MACSConfig:
 
         # Handle nested config
         if "collaboration" in data:
-            data["collaboration"] = CollaborationConfig(**data["collaboration"])
+            collab_data = data["collaboration"]
+            if isinstance(collab_data, dict):
+                collaboration = BaseCollaborationConfig(**collab_data)
+            else:
+                collaboration = collab_data
+            data["collaboration"] = collaboration
 
         agents = []
         for agent_data in data.get("agents", []):
@@ -160,8 +150,8 @@ class ConfigManager:
     def _mark_all_sources(self, source: ConfigSource) -> None:
         """Mark all config fields as coming from a source."""
         import dataclasses
-        for field in dataclasses.fields(self._config):
-            self._sources[field.name] = source
+        for f in dataclasses.fields(self._config):
+            self._sources[f.name] = source
 
     def _set_nested(self, path: str, value: Any) -> None:
         """Set a nested configuration value."""
