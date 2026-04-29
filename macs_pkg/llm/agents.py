@@ -122,7 +122,7 @@ class LLMExecutorAgent(ClaudeAgentMixin, ExecutorAgent):
         # Build tool schemas if a registry is provided
         tools = None
         if self._tool_registry:
-            schemas = self._tool_registry.get_specs()
+            schemas = self._tool_registry.get_openai_specs()
             if schemas:
                 tools = schemas
 
@@ -297,11 +297,8 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
         if rag_context:
             prompt_base = f"{rag_context}\n请基于上述检索结果回答：\n\n{task_text}"
 
+        # MiniMax API doesn't support OpenAI tool format — rely on proactive RAG instead
         tools = None
-        if self._tool_registry:
-            schemas = self._tool_registry.get_specs()
-            if schemas:
-                tools = schemas
 
         # Self-correction loop
         last_error = None
