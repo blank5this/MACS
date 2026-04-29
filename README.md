@@ -1,5 +1,11 @@
 # MACS - Multi-Agent Collaboration System
 
+[![Tests](https://github.com/blank5this/MACS/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/blank5this/MACS/actions)
+[![PyPI version](https://img.shields.io/pypi/v/macs_pkg.svg)](https://pypi.org/project/macs_pkg/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![Downloads](https://img.shields.io/pypi/dm/macs_pkg.svg)](https://pypi.org/project/macs_pkg/)
+
 一个通用的、可扩展的多智能体协作系统框架，支持多种协作模式（层级式、去中心化、管道式）。
 
 ## 特性
