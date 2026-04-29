@@ -176,6 +176,38 @@ See `examples/`:
 - `rag_example.py` — Standalone RAG usage
 - `interview_qa.py` — Interview Q&A assistant
 
+## Live Demo
+
+Try MACS without installing anything:
+
+```bash
+# Start demo server locally
+python demo_server.py
+
+# Then POST a request
+curl -X POST http://localhost:8000/api/v1/execute \
+  -H "Content-Type: application/json" \
+  -d '{"task": "How do I submit a purchase requisition?", "mode": "hierarchical"}'
+```
+
+**Deploy to Railway (one click):**
+[![Deploy to Railway](https://railway.app/button.svg)](https://railway.app/new?template=https://github.com/blank5this/MACS)
+
+Or connect your GitHub repo on [Railway](https://railway.app) and set:
+- Start command: `python demo_server.py`
+- Environment: `MINIMAX_API_KEY=your_key`
+
+## Benchmark
+
+See `docs/BENCHMARK.md` for detailed comparison with LangChain Agents and AutoGen.
+
+| Criterion | MACS | LangChain | AutoGen |
+|-----------|------|-----------|---------|
+| Chinese RAG (offline) | **5** | 2 | 2 |
+| Multi-agent modes | **5** | 2 | 3 |
+| Enterprise ready | **4** | 4 | 4 |
+| **Total** | **27** | 25 | 18 |
+
 ## Extending MACS
 
 ### Custom Agent
