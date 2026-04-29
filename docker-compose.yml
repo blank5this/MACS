@@ -1,0 +1,82 @@
+# MACS Docker Compose - Full Stack Deployment
+# Usage: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # MACS API Server
+  macs:
+    build: .
+    container_name: macs-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Redis Configuration
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      # Chroma Configuration
+      - CHROMA_PERSIST_DIR=/data/chroma
+    volumes:
+      - macs-data:/data
+      - ./examples:/app/examples:ro
+    depends_on:
+      - redis
+    networks:
+      - macs-net
+    restart: unless-stopped
+
+  # Redis Message Queue
+  redis:
+    image: redis:7-alpine
+    container_name: macs-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - macs-net
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Prometheus Metrics Collector
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: macs-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - macs-net
+    restart: unless-stopped
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: macs-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - macs-net
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  macs-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  macs-net:
+    driver: bridge

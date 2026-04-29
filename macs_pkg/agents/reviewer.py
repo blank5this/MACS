@@ -1,0 +1,548 @@
+"""Reviewer Agent - reviews and validates results with LLM integration."""
+
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import asyncio
+
+from ..core.agent import BaseAgent, AgentRole, Message, AgentState
+
+try:
+    from loguru import logger
+except ImportError:
+    import logging
+    logger = logging.getLogger("reviewer")
+
+if TYPE_CHECKING:
+    from ..llm.base import LLMProvider
+
+# Default system prompt for reviewer
+DEFAULT_SYSTEM_PROMPT = """You are a Reviewer Agent specialized in quality assurance and validation.
+
+Your responsibilities:
+1. Review results against requirements and acceptance criteria
+2. Validate completeness, correctness, and relevance
+3. Provide constructive feedback for improvements
+4. Approve or reject results based on quality threshold
+5. Aggregate feedback from multiple reviews
+
+When reviewing:
+- Check against original requirements and acceptance criteria
+- Be fair but strict - quality matters
+- Provide specific, actionable feedback
+- Suggest improvements when rejecting
+
+Respond in JSON format for machine-readable reviews."""
+
+
+class ReviewerAgent(BaseAgent):
+    """Reviewer Agent for validating and quality-checking results.
+
+    Responsibilities:
+    - Review results from executors
+    - Validate against requirements
+    - Provide feedback for improvements
+    - Approve or reject results
+    - Aggregate multiple results
+    """
+
+    def __init__(
+        self,
+        name: str = "reviewer",
+        model: str = "gpt-4",
+        system_prompt: Optional[str] = None,
+        provider: Optional["LLMProvider"] = None,
+        quality_threshold: float = 0.7,
+        enable_llm: bool = True,
+    ):
+        super().__init__(
+            name=name,
+            role=AgentRole.REVIEWER,
+            model=model,
+            system_prompt=system_prompt or DEFAULT_SYSTEM_PROMPT,
+        )
+        self._provider = provider
+        self._enable_llm = enable_llm and provider is not None
+        self.quality_threshold = quality_threshold
+        self._reviews: Dict[str, Dict[str, Any]] = {}
+        self._criteria: List[str] = [
+            "completeness",
+            "correctness",
+            "relevance",
+        ]
+
+    def set_provider(self, provider: "LLMProvider") -> None:
+        """Set the LLM provider for this agent.
+
+        Args:
+            provider: LLM provider instance.
+        """
+        self._provider = provider
+        self._enable_llm = True
+
+    def set_criteria(self, criteria: List[str]) -> None:
+        """Set review criteria.
+
+        Args:
+            criteria: List of criteria names.
+        """
+        self._criteria = criteria
+
+    async def think(self, message: Message) -> Message:
+        """Process review request and prepare review.
+
+        Args:
+            message: Incoming message with results to review.
+
+        Returns:
+            Response with review plan.
+        """
+        self.state = AgentState.THINKING
+        content = message.content
+
+        action = content.get("action", "review") if isinstance(content, dict) else "review"
+
+        if action == "review":
+            results = content.get("results", [])
+            review_plan = self._create_review_plan(results)
+
+            response_content = {
+                "action": "review_ready",
+                "results_to_review": results,
+                "review_plan": review_plan,
+                "criteria": self._criteria,
+            }
+        elif action == "aggregate":
+            response_content = await self._prepare_aggregation(content)
+        elif action == "propose":
+            # Generate review proposal for decentralized mode
+            task = content.get("task", content)
+            proposal = self._generate_review_proposal(task)
+            response_content = {
+                "action": "propose",
+                "proposal": proposal,
+                "proposer": self.name,
+            }
+        elif action == "vote":
+            # Vote on a proposal
+            vote_result = self._vote_on_proposal(content.get("proposal"))
+            response_content = {
+                "action": "vote",
+                "vote": vote_result,
+                "voter": self.name,
+            }
+        else:
+            response_content = {
+                "action": "unknown",
+                "error": f"Unknown action: {action}",
+            }
+
+        response = Message(
+            sender=self.name,
+            receiver=message.sender,
+            content=response_content,
+            msg_type="review",
+            metadata={
+                "original_id": message.id,
+                "role": self.role.value,
+            },
+        )
+
+        self.state = AgentState.IDLE
+        return response
+
+    async def act(self, response: Message) -> List[Message]:
+        """Execute review and send results.
+
+        Args:
+            response: The response from think phase.
+
+        Returns:
+            List of messages (review results).
+        """
+        self.state = AgentState.ACTING
+        outgoing = []
+
+        content = response.content
+        if content.get("action") == "review_ready":
+            results = content.get("results_to_review", [])
+            review_plan = content.get("review_plan", [])
+
+            # Execute review
+            if self._enable_llm and self._provider is not None:
+                review_results = await self._review_results_with_llm(results)
+            else:
+                review_results = []
+                for result_item in results:
+                    review = await self._review_result_simple(result_item, review_plan)
+                    review_results.append(review)
+
+            # Aggregate review
+            aggregated = self._aggregate_reviews(review_results)
+
+            # Determine approval status
+            approved = aggregated.get("overall_score", 0) >= self.quality_threshold
+
+            # Store review
+            review_id = f"review_{response.id}"
+            self._reviews[review_id] = {
+                "results": review_results,
+                "aggregated": aggregated,
+                "approved": approved,
+            }
+
+            # Create response message
+            result_msg = Message(
+                sender=self.name,
+                receiver=response.sender,
+                content={
+                    "action": "review_complete",
+                    "review_id": review_id,
+                    "results": review_results,
+                    "aggregated": aggregated,
+                    "approved": approved,
+                    "feedback": aggregated.get("feedback", []) if not approved else None,
+                },
+                msg_type="result",
+                metadata={
+                    "parent_id": response.metadata.get("original_id"),
+                },
+            )
+            outgoing.append(result_msg)
+
+            # Remember this review
+            if self.has_long_term_memory():
+                await self.remember(
+                    content=f"Review {'approved' if approved else 'rejected'} - Score: {aggregated.get('overall_score', 0):.2f}",
+                    memory_type="result",
+                    metadata={
+                        "review_id": review_id,
+                        "approved": approved,
+                        "score": aggregated.get("overall_score", 0),
+                    },
+                )
+
+        self.add_to_memory(response)
+        self.state = AgentState.IDLE
+        return outgoing
+
+    def _create_review_plan(self, results: List[Any]) -> List[Dict[str, Any]]:
+        """Create a review plan for the results.
+
+        Args:
+            results: Results to review.
+
+        Returns:
+            List of review steps.
+        """
+        plan = []
+
+        for criterion in self._criteria:
+            plan.append({
+                "criterion": criterion,
+                "check": f"validate_{criterion}",
+            })
+
+        # Add aggregation step
+        plan.append({
+            "criterion": "overall",
+            "check": "aggregate_scores",
+        })
+
+        return plan
+
+    async def _review_results_with_llm(self, results: List[Any]) -> List[Dict[str, Any]]:
+        """Use LLM to review all results.
+
+        Args:
+            results: Results to review.
+
+        Returns:
+            List of review results with scores and feedback.
+        """
+        from ..llm.base import LLMMessage
+        import json
+
+        results_text = json.dumps(results, indent=2, default=str)
+
+        prompt = f"""Review the following execution results against the criteria:
+Criteria: {", ".join(self._criteria)}
+
+Results to review:
+{results_text}
+
+For each result, evaluate:
+1. Completeness - Is everything required present?
+2. Correctness - Is the output correct and error-free?
+3. Relevance - Does it address the original task?
+
+Respond with a JSON array of reviews:
+[
+  {{
+    "result": "the result being reviewed",
+    "scores": {{
+      "completeness": 0.0-1.0,
+      "correctness": 0.0-1.0,
+      "relevance": 0.0-1.0
+    }},
+    "feedback": ["specific feedback point 1", "specific feedback point 2"],
+    "issues": ["issue 1 if any", "issue 2 if any"] (empty array if no issues)
+  }}
+]
+
+Only respond with JSON."""
+
+        try:
+            response = await self._provider.complete(
+                messages=[LLMMessage(role="user", content=prompt)],
+                system=self.system_prompt,
+                max_tokens=2048,
+                temperature=0.3,
+            )
+
+            review_text = response.content.strip()
+
+            # Try to extract JSON from markdown code blocks if present
+            if "```json" in review_text:
+                start = review_text.find("```json") + 7
+                end = review_text.find("```", start)
+                review_text = review_text[start:end]
+            elif "```" in review_text:
+                start = review_text.find("```") + 3
+                end = review_text.find("```", start)
+                review_text = review_text[start:end]
+
+            reviews = json.loads(review_text)
+            return reviews
+
+        except (json.JSONDecodeError, Exception) as e:
+            logger.warning(f"LLM review failed: {e}, using simple fallback")
+            # Fallback to simple reviews
+            review_plan = self._create_review_plan(results)
+            reviews = []
+            for result_item in results:
+                review = await self._review_result_simple(result_item, review_plan)
+                reviews.append(review)
+            return reviews
+
+    async def _review_result_simple(
+        self,
+        result: Any,
+        review_plan: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Simple fallback review without LLM.
+
+        Args:
+            result: Result to review.
+            review_plan: Plan of what to check.
+
+        Returns:
+            Review scores and feedback.
+        """
+        scores = {}
+        feedback = {}
+
+        for step in review_plan:
+            criterion = step.get("criterion")
+
+            if criterion == "completeness":
+                scores["completeness"] = self._score_completeness(result)
+                feedback["completeness"] = "Complete" if scores["completeness"] >= 0.7 else "Incomplete"
+
+            elif criterion == "correctness":
+                scores["correctness"] = self._score_correctness(result)
+                feedback["correctness"] = "Correct" if scores["correctness"] >= 0.7 else "May have issues"
+
+            elif criterion == "relevance":
+                scores["relevance"] = self._score_relevance(result)
+                feedback["relevance"] = "Relevant" if scores["relevance"] >= 0.7 else "Not relevant"
+
+        return {
+            "result": result,
+            "scores": scores,
+            "feedback": list(feedback.values()),
+            "issues": [] if all(s >= 0.7 for s in scores.values()) else ["Needs improvement"],
+        }
+
+    async def _review_result(
+        self,
+        result: Any,
+        review_plan: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Review a single result.
+
+        Args:
+            result: Result to review.
+            review_plan: Plan of what to check.
+
+        Returns:
+            Review scores and feedback.
+        """
+        if self._enable_llm and self._provider is not None:
+            # Use LLM for review
+            return await self._review_result_with_llm(result)
+        return await self._review_result_simple(result, review_plan)
+
+    async def _review_result_with_llm(self, result: Any) -> Dict[str, Any]:
+        """Use LLM to review a single result.
+
+        Args:
+            result: Result to review.
+
+        Returns:
+            Review scores and feedback.
+        """
+        from ..llm.base import LLMMessage
+        import json
+
+        prompt = f"""Review this result:
+{json.dumps(result, indent=2, default=str)}
+
+Evaluate:
+1. Completeness: Is everything required present? (0.0-1.0)
+2. Correctness: Is the output correct? (0.0-1.0)
+3. Relevance: Does it address the task? (0.0-1.0)
+
+Respond with JSON:
+{{
+  "scores": {{"completeness": X, "correctness": Y, "relevance": Z}},
+  "feedback": ["feedback point 1", "feedback point 2"],
+  "issues": ["issue if any"]
+}}
+
+Only respond with JSON."""
+
+        try:
+            response = await self._provider.complete(
+                messages=[LLMMessage(role="user", content=prompt)],
+                system=self.system_prompt,
+                max_tokens=1024,
+                temperature=0.3,
+            )
+
+            review_text = response.content.strip()
+            if "```json" in review_text:
+                start = review_text.find("```json") + 7
+                end = review_text.find("```", start)
+                review_text = review_text[start:end]
+            elif "```" in review_text:
+                start = review_text.find("```") + 3
+                end = review_text.find("```", start)
+                review_text = review_text[start:end]
+
+            return json.loads(review_text)
+
+        except (json.JSONDecodeError, Exception):
+            return await self._review_result_simple(result, self._create_review_plan([result]))
+
+    def _score_completeness(self, result: Any) -> float:
+        """Score completeness of a result."""
+        if isinstance(result, dict):
+            required_keys = ["subtask_id", "final_output"]
+            present = sum(1 for k in required_keys if k in result)
+            return present / len(required_keys)
+        return 0.8 if result else 0.0
+
+    def _score_correctness(self, result: Any) -> float:
+        """Score correctness of a result."""
+        if isinstance(result, dict):
+            if "error" in result:
+                return 0.0
+            if "final_output" in result:
+                return 0.9
+        return 0.7
+
+    def _score_relevance(self, result: Any) -> float:
+        """Score relevance of a result."""
+        if isinstance(result, dict):
+            output = str(result.get("final_output", ""))
+            if output and not output.startswith("Error"):
+                return 0.85
+        return 0.5
+
+    def _aggregate_reviews(self, reviews: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Aggregate multiple review results.
+
+        Args:
+            reviews: List of individual reviews.
+
+        Returns:
+            Aggregated review results.
+        """
+        if not reviews:
+            return {"overall_score": 0, "feedback": []}
+
+        # Calculate average scores per criterion
+        all_scores = {}
+        for review in reviews:
+            for criterion, score in review.get("scores", {}).items():
+                if criterion not in all_scores:
+                    all_scores[criterion] = []
+                all_scores[criterion].append(score)
+
+        avg_scores = {
+            criterion: sum(scores) / len(scores)
+            for criterion, scores in all_scores.items()
+        }
+
+        # Calculate overall score
+        overall_score = sum(avg_scores.values()) / len(avg_scores) if avg_scores else 0
+
+        # Collect feedback
+        all_feedback = []
+        for review in reviews:
+            all_feedback.extend(review.get("feedback", []))
+
+        return {
+            "criterion_scores": avg_scores,
+            "overall_score": overall_score,
+            "feedback": list(set(all_feedback)),
+        }
+
+    async def _prepare_aggregation(self, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare for result aggregation."""
+        results = content.get("results", [])
+        return {
+            "action": "aggregation_ready",
+            "results": results,
+            "count": len(results),
+        }
+
+    def _generate_review_proposal(self, task: Any) -> Dict[str, Any]:
+        """Generate a review proposal for decentralized collaboration.
+
+        Args:
+            task: The task to generate proposal for.
+
+        Returns:
+            A proposal dictionary.
+        """
+        task_desc = task.get('description', task) if isinstance(task, dict) else str(task)
+        return {
+            "type": "review_proposal",
+            "task": task_desc,
+            "approach": "Review for quality, completeness, and correctness",
+            "review_criteria": ["completeness", "correctness", "relevance"],
+            "estimated_duration": "Short",
+            "confidence": 0.8,
+        }
+
+    def _vote_on_proposal(self, proposal: Any) -> str:
+        """Vote on a proposal.
+
+        Args:
+            proposal: The proposal to vote on.
+
+        Returns:
+            "approve" or "reject".
+        """
+        if isinstance(proposal, dict):
+            confidence = proposal.get("confidence", 0.5)
+            return "approve" if confidence >= 0.5 else "reject"
+        return "approve"
+
+    def get_review(self, review_id: str) -> Optional[Dict[str, Any]]:
+        """Get a stored review by ID."""
+        return self._reviews.get(review_id)
+
+    def get_all_reviews(self) -> Dict[str, Dict[str, Any]]:
+        """Get all stored reviews."""
+        return self._reviews.copy()
