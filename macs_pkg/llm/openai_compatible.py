@@ -152,7 +152,7 @@ class OpenAICompatibleProvider(LLMProvider):
             async with openai.AsyncOpenAI(
                 api_key=self._api_key,
                 base_url=self._base_url,
-                timeout=openai._utils.DEFAULT_TIMEOUT_CONFIG.merge(timeout=timeout),
+                timeout=timeout,
                 default_headers=headers,
             ) as client:
                 response = await client.chat.completions.create(**payload)
