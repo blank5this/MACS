@@ -12,7 +12,28 @@ from .errors import (
     ConfigException,
 )
 
+from .guardrails import (
+    AgentGuardrails,
+    GuardrailsConfig,
+    SecurityError,
+    RateLimitError,
+    ResourceLimitError,
+)
+
+from .token_budget import (
+    TokenBudget,
+    TokenBudgetConfig,
+    TokenUsage,
+    BudgetExceededError,
+)
+
+from .session_memory import (
+    SessionMemory,
+    ConversationTurn,
+)
+
 __all__ = [
+    # Errors
     "MACSErrorCode",
     "MACSException",
     "AgentException",
@@ -22,4 +43,18 @@ __all__ = [
     "ToolException",
     "RuntimeException",
     "ConfigException",
+    # Guardrails
+    "AgentGuardrails",
+    "GuardrailsConfig",
+    "SecurityError",
+    "RateLimitError",
+    "ResourceLimitError",
+    # Token Budget
+    "TokenBudget",
+    "TokenBudgetConfig",
+    "TokenUsage",
+    "BudgetExceededError",
+    # Session Memory
+    "SessionMemory",
+    "ConversationTurn",
 ]
