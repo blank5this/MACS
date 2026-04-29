@@ -17,8 +17,7 @@ class PipelineMode(CollaborationMode):
     4. Each agent transforms or enhances the result
 
     Flow:
-    User Input → Agent₁ → Agent₂ → Agent₃ → Final Output
-                (每步处理后传递给下一步)
+    User Input → Agent1 → Agent2 → Agent3 → Final Output
 
     Example use cases:
     - ETL pipelines: Extract → Transform → Load
