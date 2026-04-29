@@ -3,7 +3,7 @@
 This module provides RAG capabilities for the MACS multi-agent system:
 
 - Document processing and chunking
-- Multiple embedding model support (sentence-transformers, OpenAI, MiniMax)
+- Multiple embedding model support (chinese_char_ngram, sentence-transformers, OpenAI, MiniMax)
 - Vector store implementations (in-memory, Chroma, FAISS)
 - RAG engine for retrieval and context augmentation
 
@@ -45,6 +45,7 @@ from .embedder import (
     MiniMaxEmbedder,
     create_embedder,
 )
+from .chinese_embedder import ChineseCharNgramEmbedder
 from .vector_store import (
     VectorStore,
     SearchResult,
@@ -71,6 +72,7 @@ __all__ = [
     "SentenceTransformerEmbedder",
     "OpenAIEmbedder",
     "MiniMaxEmbedder",
+    "ChineseCharNgramEmbedder",
     "create_embedder",
     # Vector stores
     "VectorStore",

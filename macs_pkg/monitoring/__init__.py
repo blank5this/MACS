@@ -11,6 +11,13 @@ except ImportError:
     _has_prometheus = False
     PrometheusExporter = None
 
+try:
+    from .openTelemetry_exporter import OpenTelemetryExporter
+    _has_otel = True
+except ImportError:
+    _has_otel = False
+    OpenTelemetryExporter = None
+
 __all__ = [
     "Event", "EventBus", "EventType", "get_event_bus", "reset_event_bus",
     "Counter", "Gauge", "Histogram", "MetricsStore",
@@ -18,3 +25,5 @@ __all__ = [
 ]
 if _has_prometheus:
     __all__.append("PrometheusExporter")
+if _has_otel:
+    __all__.append("OpenTelemetryExporter")
