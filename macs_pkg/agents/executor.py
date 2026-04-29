@@ -271,10 +271,7 @@ class ExecutorAgent(BaseAgent):
         Returns:
             "approve" or "reject".
         """
-        if isinstance(proposal, dict):
-            confidence = proposal.get("confidence", 0.5)
-            return "approve" if confidence >= 0.5 else "reject"
-        return "approve"
+        return BaseAgent.vote_on_proposal(proposal)
 
     async def _execute_subtask_with_llm(
         self,

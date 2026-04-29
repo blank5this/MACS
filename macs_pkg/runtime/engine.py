@@ -247,6 +247,135 @@ class RuntimeEngine:
 
     # ==================== Execution ====================
 
+    async def _emit_task_started(self, task_id: str) -> None:
+        """Publish TASK_STARTED event."""
+        _bus = get_event_bus()
+        await _bus.publish(Event(
+            type=EventType.TASK_STARTED,
+            source="runtime",
+            data={"task_id": task_id},
+        ))
+
+    async def _trace_task_received(self, task_id: str, task: Any) -> None:
+        """Trace task received by all agents."""
+        if self._tracer:
+            task_desc = task.get("description", str(task)) if isinstance(task, dict) else str(task)
+            for agent_name in self._agents:
+                self._tracer.trace_task_received(agent_name, task_id, task_desc)
+
+    def _create_task_context(self, task_id: str) -> TaskContext:
+        """Create task context."""
+        return TaskContext(task_id, self._context)
+
+    def _select_mode(
+        self,
+        mode: Optional[str],
+        task: Any,
+        context: Optional[Dict[str, Any]],
+    ) -> "CollaborationMode":
+        """Select collaboration mode, fallback to hierarchical."""
+        if mode:
+            collab_mode = CollaborationRegistry.create(
+                mode,
+                CollaborationConfig(max_iterations=self.config.max_iterations),
+            )
+            if collab_mode:
+                return collab_mode
+
+        # Try dynamic selection if enabled
+        if self.config.enable_dynamic_selection:
+            collab_mode = self._selector.select_mode(
+                task,
+                list(self._agents.values()),
+                context,
+            )
+            if collab_mode:
+                return collab_mode
+
+        # Fallback to hierarchical
+        return HierarchicalMode(
+            CollaborationConfig(max_iterations=self.config.max_iterations)
+        )
+
+    async def _record_success(
+        self,
+        task_id: str,
+        task: Any,
+        collaboration_mode: "CollaborationMode",
+        result: Any,
+        task_context: TaskContext,
+        duration: float,
+    ) -> Any:
+        """Record successful task completion."""
+        task_context.set("result", result)
+        task_context.merge_to_parent()
+
+        self._task_history.append({
+            "task_id": task_id,
+            "task": task,
+            "mode": collaboration_mode.name,
+            "result": result,
+            "status": "completed",
+            "duration_s": duration,
+        })
+
+        if self._tracer:
+            for agent_name in self._agents:
+                self._tracer.trace_task_completed(agent_name, task_id, success=True)
+
+        if self._shared_memory:
+            try:
+                await self._shared_memory.add_collaboration_record(
+                    task_id=task_id,
+                    agents=list(self._agents.keys()),
+                    mode=collaboration_mode.name,
+                    result=str(result)[:500],
+                )
+            except Exception as e:
+                logger.warning(f"Failed to record collaboration: {e}")
+
+        _bus = get_event_bus()
+        await _bus.publish(Event(
+            type=EventType.TASK_COMPLETED,
+            source="runtime",
+            data={"task_id": task_id, "mode": collaboration_mode.name, "duration_s": duration},
+        ))
+
+        logger.info(f"Task {task_id} completed in {duration:.2f}s")
+        return result
+
+    async def _record_error(
+        self,
+        task_id: str,
+        task: Any,
+        collaboration_mode: "CollaborationMode",
+        error: Exception,
+    ) -> Dict[str, Any]:
+        """Record failed task."""
+        if self._tracer:
+            for agent_name in self._agents:
+                self._tracer.trace_error(agent_name, str(error), {"task_id": task_id})
+
+        self._task_history.append({
+            "task_id": task_id,
+            "task": task,
+            "mode": collaboration_mode.name,
+            "error": str(error),
+            "status": "failed",
+        })
+
+        _bus = get_event_bus()
+        await _bus.publish(Event(
+            type=EventType.TASK_FAILED,
+            source="runtime",
+            data={"task_id": task_id, "mode": collaboration_mode.name, "error": str(error)},
+        ))
+
+        if self.config.stop_on_error:
+            raise
+
+        return {"error": str(error)}
+
     async def execute(
         self,
         task: Any,
@@ -264,124 +393,33 @@ class RuntimeEngine:
         Returns:
             Execution result.
         """
-        # Initialize shared memory if not already done
         if self.config.enable_shared_memory and self._shared_memory:
             await self.init_shared_memory_async()
 
         task_id = f"task_{len(self._task_history)}"
         logger.info(f"Starting task {task_id}")
 
-        # Publish task-started event
-        _bus = get_event_bus()
-        await _bus.publish(Event(
-            type=EventType.TASK_STARTED,
-            source="runtime",
-            data={"task_id": task_id},
-        ))
-        _task_start = time.monotonic()
+        await self._emit_task_started(task_id)
+        await self._trace_task_received(task_id, task)
+        task_context = self._create_task_context(task_id)
 
-        # Trace task received
-        if self._tracer:
-            task_desc = task.get("description", str(task)) if isinstance(task, dict) else str(task)
-            for agent_name in self._agents:
-                self._tracer.trace_task_received(agent_name, task_id, task_desc)
-
-        # Create task context
-        task_context = TaskContext(task_id, self._context)
-
-        # Determine collaboration mode
-        if mode:
-            collaboration_mode = CollaborationRegistry.create(
-                mode,
-                CollaborationConfig(max_iterations=self.config.max_iterations),
-            )
-        else:
-            collaboration_mode = self._selector.select_mode(
-                task,
-                list(self._agents.values()),
-                context,
-            )
-
-        if collaboration_mode is None:
-            # Fallback to hierarchical
-            collaboration_mode = HierarchicalMode(
-                CollaborationConfig(max_iterations=self.config.max_iterations)
-            )
-
+        collaboration_mode = self._select_mode(mode, task, context)
         logger.info(f"Using collaboration mode: {collaboration_mode.name}")
 
-        # Execute collaboration
+        _task_start = time.monotonic()
         try:
             result = await collaboration_mode.execute(
                 task,
                 self._agents,
                 context,
             )
-
-            # Merge task context
-            task_context.set("result", result)
-            task_context.merge_to_parent()
-
-            # Record in history
-            _duration = time.monotonic() - _task_start
-            self._task_history.append({
-                "task_id": task_id,
-                "task": task,
-                "mode": collaboration_mode.name,
-                "result": result,
-                "status": "completed",
-                "duration_s": _duration,
-            })
-
-            # Trace task completed
-            if self._tracer:
-                for agent_name in self._agents:
-                    self._tracer.trace_task_completed(agent_name, task_id, success=True)
-
-            # Record collaboration in shared memory
-            if self._shared_memory:
-                try:
-                    await self._shared_memory.add_collaboration_record(
-                        task_id=task_id,
-                        agents=list(self._agents.keys()),
-                        mode=collaboration_mode.name,
-                        result=str(result)[:500],  # Truncate for storage
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to record collaboration in shared memory: {e}")
-
-            await _bus.publish(Event(
-                type=EventType.TASK_COMPLETED,
-                source="runtime",
-                data={"task_id": task_id, "mode": collaboration_mode.name, "duration_s": _duration},
-            ))
-
-            logger.info(f"Task {task_id} completed in {_duration:.2f}s")
-            return result
-
+            duration = time.monotonic() - _task_start
+            return await self._record_success(
+                task_id, task, collaboration_mode, result, task_context, duration
+            )
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}")
-
-            # Trace error
-            if self._tracer:
-                for agent_name in self._agents:
-                    self._tracer.trace_error(agent_name, str(e), {"task_id": task_id})
-
-            self._task_history.append({
-                "task_id": task_id,
-                "task": task,
-                "mode": collaboration_mode.name,
-                "error": str(e),
-                "status": "failed",
-            })
-            await _bus.publish(Event(
-                type=EventType.TASK_FAILED,
-                source="runtime",
-                data={"task_id": task_id, "mode": collaboration_mode.name, "error": str(e)},
-            ))
-            if self.config.stop_on_error:
-                raise
-            return {"error": str(e)}
+            return await self._record_error(task_id, task, collaboration_mode, e)
 
     def execute_sync(
         self,
