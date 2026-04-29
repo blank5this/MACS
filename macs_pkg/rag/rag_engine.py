@@ -1,8 +1,9 @@
 """RAG Engine - combines embedding, vector store, and retrieval for RAG pipelines."""
 
-from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Callable, Union
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Optional, Callable
 import asyncio
+import re
 
 try:
     from loguru import logger
@@ -15,6 +16,181 @@ from .embedder import Embedder, create_embedder, DummyEmbedder
 from .vector_store import VectorStore, SearchResult, create_vector_store
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# BM25 Keyword Indexer (for hybrid search)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class BM25Indexer:
+    """Lightweight BM25 keyword search index.
+
+    Does not require external dependencies — pure Python implementation.
+    Used in hybrid search to complement vector similarity search.
+    """
+
+    def __init__(self, k1: float = 1.5, b: float = 0.75):
+        self.k1 = k1
+        self.b = b
+        self._corpus: List[str] = []
+        self._metadatas: List[Dict[str, Any]] = []
+        self._doc_lengths: List[int] = []
+        self._avg_doc_length: float = 0.0
+        self._vocab: Dict[str, int] = {}  # term -> df (document frequency)
+        self._doc_freq: Dict[str, int] = {}  # term -> number of docs containing it
+        self._num_docs: int = 0
+
+    def _tokenize(self, text: str) -> List[str]:
+        """Tokenize Chinese text into character n-grams + word unigrams."""
+        # Character bigrams for Chinese
+        chars = [c for c in text if c.strip()]
+        bigrams = [text[i:i+2] for i in range(len(text)-1) if text[i:i+2].strip()]
+        # Simple word split (space-delimited, works for both Chinese and English)
+        words = text.split()
+        return chars + bigrams + words
+
+    def _compute_idf(self, term: str, df: int, n: int) -> float:
+        """Compute IDF for a term."""
+        # Standard BM25 IDF formula
+        return max(0.0, 1.0 - (df / n) + 0.5)
+
+    async def index(self, texts: List[str], metadatas: Optional[List[Dict[str, Any]]] = None) -> None:
+        """Build BM25 index from texts."""
+        self._corpus = texts
+        self._metadatas = metadatas or [{}] * len(texts)
+        self._num_docs = len(texts)
+
+        if self._num_docs == 0:
+            return
+
+        # Compute document frequencies
+        for text in texts:
+            tokens = self._tokenize(text.lower())
+            unique_tokens = set(tokens)
+            for token in unique_tokens:
+                self._doc_freq[token] = self._doc_freq.get(token, 0) + 1
+            self._doc_lengths.append(len(tokens))
+
+        self._avg_doc_length = sum(self._doc_lengths) / self._num_docs
+
+        # Build vocab
+        self._vocab = {term: df for term, df in self._doc_freq.items()}
+
+    def _bm25_score(self, query_tokens: List[str], doc_idx: int) -> float:
+        """Compute BM25 score for a single document."""
+        doc_len = self._doc_lengths[doc_idx]
+        score = 0.0
+        doc_tokens = set(self._tokenize(self._corpus[doc_idx].lower()))
+
+        for token in query_tokens:
+            if token not in self._vocab:
+                continue
+            df = self._doc_freq[token]
+            idf = self._compute_idf(token, df, self._num_docs)
+
+            # Term frequency in this doc
+            doc_tf = self._tokenize(self._corpus[doc_idx].lower()).count(token)
+
+            # BM25 term frequency saturation
+            numerator = doc_tf * (self.k1 + 1)
+            denominator = doc_tf + self.k1 * (1 - self.b + self.b * doc_len / (self._avg_doc_length + 1e-8))
+
+            score += idf * numerator / (denominator + 1e-8)
+
+        return score
+
+    async def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """Search the BM25 index.
+
+        Returns:
+            List of dicts with 'content', 'score', 'metadata', 'chunk_id'.
+        """
+        if not self._corpus:
+            return []
+
+        query_tokens = self._tokenize(query.lower())
+        scores = []
+
+        for i in range(self._num_docs):
+            score = self._bm25_score(query_tokens, i)
+            scores.append((i, score))
+
+        # Sort by score descending
+        scores.sort(key=lambda x: x[1], reverse=True)
+
+        results = []
+        seen_content = set()
+        for doc_idx, score in scores:
+            if score <= 0.0:
+                continue
+            content = self._corpus[doc_idx]
+            # Deduplicate by content
+            if content in seen_content:
+                continue
+            seen_content.add(content)
+            results.append({
+                "content": content,
+                "score": score,
+                "metadata": self._metadatas[doc_idx],
+                "chunk_id": str(doc_idx),
+            })
+            if len(results) >= top_k:
+                break
+
+        return results
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# RRF (Reciprocal Rank Fusion) utility
+# ──────────────────────────────────────────────────────────────────────────────
+
+def rrf_fuse(
+    vector_results: List[Dict[str, Any]],
+    bm25_results: List[Dict[str, Any]],
+    k: float = 60.0,
+) -> List[Dict[str, Any]]:
+    """Fuse ranked results from vector search and BM25 using RRF.
+
+    Reciprocal Rank Fusion formula: score = sum(1 / (k + rank))
+
+    Args:
+        vector_results: Results from vector search (sorted by score desc).
+        bm25_results: Results from BM25 search (sorted by score desc).
+        k: RRF constant (higher = less weight to low-ranked results).
+
+    Returns:
+        Combined results re-ranked by RRF score.
+    """
+    rrf_scores: Dict[str, float] = {}
+
+    for rank, result in enumerate(vector_results):
+        chunk_id = result.get("chunk_id", result.get("content", ""))
+        rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0.0) + 1.0 / (k + rank + 1)
+
+    for rank, result in enumerate(bm25_results):
+        chunk_id = result.get("chunk_id", result.get("content", ""))
+        rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0.0) + 1.0 / (k + rank + 1)
+
+    # Build result map
+    all_results: Dict[str, Dict[str, Any]] = {}
+    for result in vector_results:
+        chunk_id = result.get("chunk_id", result.get("content", ""))
+        all_results[chunk_id] = {**result, "source": "vector"}
+
+    for result in bm25_results:
+        chunk_id = result.get("chunk_id", result.get("content", ""))
+        if chunk_id not in all_results:
+            all_results[chunk_id] = {**result, "source": "bm25"}
+
+    # Sort by RRF score
+    fused = sorted(
+        [{"chunk_id": cid, "rrf_score": score, **all_results[cid]}
+         for cid, score in rrf_scores.items()],
+        key=lambda x: x["rrf_score"],
+        reverse=True,
+    )
+
+    return fused
+
+
 @dataclass
 class RAGConfig:
     """Configuration for RAG engine."""
@@ -25,6 +201,7 @@ class RAGConfig:
     chunk_overlap: int = 50
     default_top_k: int = 5
     similarity_threshold: float = 0.5
+    enable_hybrid: bool = False  # Enable hybrid search (vector + BM25 + RRF)
 
     # Provider-specific settings
     model_name: Optional[str] = None
@@ -40,6 +217,7 @@ class RetrievedContext:
     score: float
     metadata: Dict[str, Any]
     chunk_id: str
+    source: str = "vector"  # "vector", "bm25", or "hybrid"
 
 
 class RAGEngine:
@@ -87,6 +265,8 @@ class RAGEngine:
             chunk_overlap=self.config.chunk_overlap,
         )
         self._processor = DocumentProcessor(chunker=self._chunker)
+        self._bm25_indexer: Optional[BM25Indexer] = None
+        self._bm25_chunks: List[str] = []
 
     @property
     def embedder(self) -> Embedder:
@@ -137,6 +317,12 @@ class RAGEngine:
             embeddings=embeddings,
         )
 
+        # Build BM25 index if hybrid search is enabled
+        if self.config.enable_hybrid:
+            self._bm25_chunks.extend(chunk_texts)
+            self._bm25_indexer = BM25Indexer()
+            await self._bm25_indexer.index(self._bm25_chunks, self._vector_store._metadatas if hasattr(self._vector_store, '_metadatas') else None)
+
         logger.info(f"Added {len(ids)} chunks to vector store")
         return len(ids)
 
@@ -166,6 +352,9 @@ class RAGEngine:
     ) -> List[RetrievedContext]:
         """Search for relevant context.
 
+        When enable_hybrid=True, combines vector search with BM25 keyword
+        search using Reciprocal Rank Fusion (RRF) for better Chinese retrieval.
+
         Args:
             query: Search query.
             top_k: Number of results (uses config default if not provided).
@@ -181,25 +370,57 @@ class RAGEngine:
         query_embedding = await self._embedder.embed(query)
 
         # Search vector store
-        results = await self._vector_store.search(
+        vector_results = await self._vector_store.search(
             query=query_embedding,
-            top_k=top_k,
+            top_k=top_k * 2,  # Fetch more for fusion
             filter_func=filter_func,
         )
 
-        # Filter by similarity threshold
-        contexts = [
-            RetrievedContext(
-                content=r.content,
-                score=r.score,
-                metadata=r.metadata,
-                chunk_id=r.chunk_id or "",
-            )
-            for r in results
-            if r.score >= self.config.similarity_threshold
-        ]
+        # BM25 search (if hybrid enabled and index exists)
+        bm25_results: List[Dict[str, Any]] = []
+        if self.config.enable_hybrid and self._bm25_indexer is not None:
+            bm25_results = await self._bm25_indexer.search(query, top_k=top_k * 2)
+            logger.debug(f"BM25 found {len(bm25_results)} results")
 
-        logger.info(f"Found {len(contexts)} relevant contexts")
+        # Hybrid fusion: RRF
+        if self.config.enable_hybrid and bm25_results:
+            fused = rrf_fuse(
+                [
+                    {"content": r.content, "score": r.score, "metadata": r.metadata, "chunk_id": r.chunk_id or ""}
+                    for r in vector_results
+                ],
+                bm25_results,
+                k=60.0,
+            )
+
+            # Normalize RRF scores to 0-1 range
+            max_rrf = fused[0]["rrf_score"] if fused else 1.0
+            contexts = [
+                RetrievedContext(
+                    content=r["content"],
+                    score=r["rrf_score"] / max_rrf,  # Normalize to 0-1
+                    metadata=r["metadata"],
+                    chunk_id=r["chunk_id"],
+                    source="hybrid",
+                )
+                for r in fused[:top_k]
+                if r["rrf_score"] > 0
+            ]
+        else:
+            # Pure vector search
+            contexts = [
+                RetrievedContext(
+                    content=r.content,
+                    score=r.score,
+                    metadata=r.metadata,
+                    chunk_id=r.chunk_id or "",
+                    source="vector",
+                )
+                for r in vector_results
+                if r.score >= self.config.similarity_threshold
+            ]
+
+        logger.info(f"Found {len(contexts)} relevant contexts (mode={'hybrid' if self.config.enable_hybrid and bm25_results else 'vector'})")
         return contexts
 
     async def retrieve_and_augment(
