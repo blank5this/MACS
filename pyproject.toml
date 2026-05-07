@@ -3,25 +3,38 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "macs"
-version = "0.1.0"
-description = "Multi-Agent Collaboration System - A general-purpose multi-agent collaboration framework"
+name = "macs_pkg"
+version = "0.2.0"
+description = "MACS - Multi-Agent Collaboration System for building intelligent agent applications"
 readme = "README.md"
-requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "MACS Team"}
+    {name = "Your Name", email = "your.email@example.com"}
 ]
-keywords = ["multi-agent", "ai-agent", "collaboration", "langchain", "autogen"]
+keywords = [
+    "multi-agent",
+    "ai-agents",
+    "autogen",
+    "langchain",
+    "llm",
+    "artificial-intelligence",
+    "chatgpt",
+    "openai",
+    "claude"
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-
+requires-python = ">=3.10"
 dependencies = [
     "autogen-agentchat>=0.2.0",
     "langchain>=0.1.0",
@@ -30,24 +43,50 @@ dependencies = [
     "pydantic>=2.0",
     "python-dotenv>=1.0.0",
     "loguru>=0.7.0",
+    "duckduckgo-search>=3.0.0",
+    "tavily-python>=0.3.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.5.0",
 ]
-otel = [
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
-    "opentelemetry-exporter-otlp-proto-http>=1.20.0",
+all = [
+    "anthropic>=0.18.0",
+    "openai>=1.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/blank5this/MACS"
+Documentation = "https://github.com/blank5this/MACS#readme"
+Repository = "https://github.com/blank5this/MACS"
+Issues = "https://github.com/blank5this/MACS/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["macs_pkg*"]
 
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 asyncio_mode = "auto"
-testpaths = ["macs_pkg/tests"]
+addopts = "-v --tb=short"

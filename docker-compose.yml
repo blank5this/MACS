@@ -1,82 +1,58 @@
-# MACS Docker Compose - Full Stack Deployment
-# Usage: docker-compose up -d
-
+# MACS Docker Compose Configuration
 version: '3.8'
 
 services:
-  # MACS API Server
-  macs:
-    build: .
+  # Development environment
+  dev:
+    build:
+      context: .
+      target: development
+    container_name: macs-dev
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MACS_LOG_LEVEL=DEBUG
+      # Add your API keys here or use .env file
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - HUNYUAN_API_KEY=${HUNYUAN_API_KEY:-}
+    volumes:
+      - ./macs_pkg:/app/macs_pkg:rw
+      - ./examples:/app/examples:rw
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # Production service example
+  macs-api:
+    build:
+      context: .
+      target: production
     container_name: macs-api
     ports:
       - "8000:8000"
     environment:
-      - PYTHONPATH=/app
-      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      # Redis Configuration
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=0
-      # Chroma Configuration
-      - CHROMA_PERSIST_DIR=/data/chroma
-    volumes:
-      - macs-data:/data
-      - ./examples:/app/examples:ro
-    depends_on:
-      - redis
-    networks:
-      - macs-net
+      - PYTHONUNBUFFERED=1
+      - MACS_LOG_LEVEL=INFO
+      - MODEL=${DEFAULT_MODEL:-gpt-4}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "from macs_pkg.llm import MiniMaxProvider; print('ok')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Redis Message Queue
-  redis:
-    image: redis:7-alpine
-    container_name: macs-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - macs-net
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-
-  # Prometheus Metrics Collector
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: macs-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-    networks:
-      - macs-net
-    restart: unless-stopped
-
-  # Grafana Dashboard
-  grafana:
-    image: grafana/grafana:latest
-    container_name: macs-grafana
-    ports:
-      - "3000:3000"
+  # Test runner
+  test:
+    build:
+      context: .
+      target: development
+    container_name: macs-test
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - PYTHONUNBUFFERED=1
+      - MACS_LOG_LEVEL=DEBUG
     volumes:
-      - grafana-data:/var/lib/grafana
-    networks:
-      - macs-net
-    depends_on:
-      - prometheus
-    restart: unless-stopped
-
-volumes:
-  macs-data:
-  redis-data:
-  prometheus-data:
-  grafana-data:
-
-networks:
-  macs-net:
-    driver: bridge
+      - ./macs_pkg:/app/macs_pkg:ro
+      - ./tests:/app/tests:ro
+    command: pytest tests/ -v --tb=short
+    profiles:
+      - test  # Only run with: docker-compose --profile test up
