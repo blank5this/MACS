@@ -24,6 +24,7 @@ from ..agents.reviewer import ReviewerAgent
 from .claude import ClaudeAgentMixin
 from .openai_compatible import MiniMaxAgentMixin, TimeoutError as LLMTimeoutError, RateLimitError as LLMRateLimitError
 from .base import LLMProvider
+from ..monitoring.event_bus import Event, EventType, get_event_bus
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -304,6 +305,17 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
         last_error = None
         feedback_text = ""
         for attempt in range(max_correction_attempts):
+            _bus = get_event_bus()
+            await _bus.publish(Event(
+                type=EventType.CORRECTION_ATTEMPT_STARTED,
+                source=f"MiniMaxExecutorAgent:{task_id}",
+                data={
+                    "task_id": task_id,
+                    "attempt": attempt + 1,
+                    "max_attempts": max_correction_attempts,
+                    "has_feedback": bool(feedback_text),
+                },
+            ))
             try:
                 prompt = prompt_base
                 if feedback_text and attempt > 0:
@@ -337,6 +349,18 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
                     )
                     result_data["quality_score"] = quality_score
 
+                    await _bus.publish(Event(
+                        type=EventType.CORRECTION_QUALITY_EVALUATED,
+                        source=f"MiniMaxExecutorAgent:{task_id}",
+                        data={
+                            "task_id": task_id,
+                            "attempt": attempt + 1,
+                            "quality_score": quality_score,
+                            "min_quality_score": min_quality_score,
+                            "passed": quality_score >= min_quality_score,
+                        },
+                    ))
+
                     if quality_score < min_quality_score:
                         feedback_text = result_data.get("feedback", [])
                         if isinstance(feedback_text, list):
@@ -346,6 +370,16 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
                         continue  # Retry
 
                 result_data["attempts"] = attempt + 1
+                await _bus.publish(Event(
+                    type=EventType.CORRECTION_COMPLETED,
+                    source=f"MiniMaxExecutorAgent:{task_id}",
+                    data={
+                        "task_id": task_id,
+                        "success": True,
+                        "total_attempts": attempt + 1,
+                        "quality_score": result_data.get("quality_score"),
+                    },
+                ))
                 return result_data
 
             except LLMTimeoutError as e:
@@ -367,6 +401,16 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
                 continue
 
         # All attempts failed
+        await _bus.publish(Event(
+            type=EventType.CORRECTION_COMPLETED,
+            source=f"MiniMaxExecutorAgent:{task_id}",
+            data={
+                "task_id": task_id,
+                "success": False,
+                "total_attempts": max_correction_attempts,
+                "error": last_error,
+            },
+        ))
         return {
             "error": last_error or "Max correction attempts reached",
             "subtask_id": task_id,

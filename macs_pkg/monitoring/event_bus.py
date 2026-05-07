@@ -37,6 +37,11 @@ class EventType(Enum):
     LLM_CALL_COMPLETED = "llm_call_completed"
     LLM_TOOL_USED = "llm_tool_used"
 
+    # Self-correction
+    CORRECTION_ATTEMPT_STARTED = "correction_attempt_started"
+    CORRECTION_QUALITY_EVALUATED = "correction_quality_evaluated"
+    CORRECTION_COMPLETED = "correction_completed"
+
     # Tools
     TOOL_INVOKED = "tool_invoked"
     TOOL_RESULT = "tool_result"
