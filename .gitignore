@@ -2,43 +2,98 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
 
 # Distribution / packaging
 .Python
 build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
 
-# Virtual environments
-venv/
-.venv/
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Environments
+.env
+.venv
 env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
+# Jupyter Notebook
+.ipynb_checkpoints
 
-# Secrets
-.env
-*.pem
-*.key
+# pyenv
+.python-version
 
-# OS
+# macOS
 .DS_Store
-Thumbs.db
 
 # Logs
 *.log
 logs/
 
-# Local memory/storage
-~/.macs/
-.macs_memory/
+# Local configuration
+*.local
+config.local.py
+
+# Model weights (if downloaded)
+*.bin
+*.pt
+*.pth
+*.onnx
+
+# Database
+*.db
+*.sqlite
+
+# Secrets (never commit!)
+*.pem
+*.key
+secrets/
