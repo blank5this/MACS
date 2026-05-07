@@ -316,4 +316,17 @@ class DockerCodeExecutorTool(BaseTool):
             return ToolResult(
                 success=result.returncode == 0,
                 output=result.stdout,
-                error
+                error=result.stderr if result.returncode != 0 else None,
+                metadata={"duration_ms": duration, "return_code": result.returncode},
+            )
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                output=None,
+                error=str(e),
+                metadata={"duration_ms": (time.time() - start) * 1000},
+            )
+        finally:
+            # 清理临时目录
+            import shutil as _shutil
+            _shutil.rmtree(tmp_dir, ignore_errors=True)
