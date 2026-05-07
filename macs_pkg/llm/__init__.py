@@ -9,6 +9,13 @@ from .openai_compatible import (
 )
 from .qwen import QwenProvider, QwenAgentMixin
 from .zhipu import ZhipuProvider
+from .hunyuan import (
+    HunyuanProvider,
+    HunyuanAgentMixin,
+    HunyuanPlannerAgent,
+    HunyuanExecutorAgent,
+    HunyuanReviewerAgent,
+)
 from .agents import (
     LLMPlannerAgent, LLMExecutorAgent, LLMReviewerAgent,
     MiniMaxPlannerAgent, MiniMaxExecutorAgent, MiniMaxReviewerAgent,
@@ -22,6 +29,8 @@ __all__ = [
     "OpenAICompatibleProvider", "MiniMaxProvider", "MiniMaxAgentMixin",
     "QwenProvider", "QwenAgentMixin",
     "ZhipuProvider",
+    "HunyuanProvider", "HunyuanAgentMixin",
+    "HunyuanPlannerAgent", "HunyuanExecutorAgent", "HunyuanReviewerAgent",
     # Agents
     "LLMPlannerAgent", "LLMExecutorAgent", "LLMReviewerAgent",
     "MiniMaxPlannerAgent", "MiniMaxExecutorAgent", "MiniMaxReviewerAgent",
