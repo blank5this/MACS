@@ -37,6 +37,7 @@ pip install autogen-agentchat langchain langchain-openai pydantic loguru
 | **Qwen** (通义千问) | qwen-plus, qwen-turbo | OpenAI Compatible |
 | **Zhipu** (智谱 GLM) | glm-4, glm-3-turbo | OpenAI Compatible |
 | **DeepSeek** | deepseek-chat | OpenAI Compatible |
+| **Hunyuan** (混元) | hunyuan-turb, hunyuan-plus, hunyuan-pro | Tencent Cloud |
 | **OpenAI** | GPT-4o, GPT-4 | OpenAI |
 
 ### 使用示例
@@ -56,6 +57,19 @@ provider = QwenProvider(api_key="your_key", model="qwen-plus")
 from macs_pkg.llm import ZhipuProvider
 
 provider = ZhipuProvider(api_key="your_key", model="glm-4")
+
+# Hunyuan (混元) - 腾讯自研大模型
+from macs_pkg.llm import HunyuanProvider
+
+# 方式1: 使用混元 API Key (新版)
+provider = HunyuanProvider(api_key="your_hunyuan_key", model="hunyuan-turb")
+
+# 方式2: 使用腾讯云 SecretId/SecretKey
+provider = HunyuanProvider(
+    secret_id="your_secret_id",
+    secret_key="your_secret_key",
+    model="hunyuan-plus",
+)
 ```
 
 ## 内置工具
