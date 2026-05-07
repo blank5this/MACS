@@ -28,6 +28,73 @@ pip install -r requirements.txt
 pip install autogen-agentchat langchain langchain-openai pydantic loguru
 ```
 
+## 支持的 LLM Provider
+
+| Provider | 模型 | API 类型 |
+|----------|------|----------|
+| **MiniMax** | M2.7 | OpenAI Compatible |
+| **Claude** | Sonnet 4 | Anthropic |
+| **Qwen** (通义千问) | qwen-plus, qwen-turbo | OpenAI Compatible |
+| **Zhipu** (智谱 GLM) | glm-4, glm-3-turbo | OpenAI Compatible |
+| **DeepSeek** | deepseek-chat | OpenAI Compatible |
+| **OpenAI** | GPT-4o, GPT-4 | OpenAI |
+
+### 使用示例
+
+```python
+# MiniMax
+from macs_pkg.llm import MiniMaxProvider
+
+provider = MiniMaxProvider(api_key="your_key", model="MiniMax-M2.7")
+
+# Qwen (通义千问)
+from macs_pkg.llm import QwenProvider
+
+provider = QwenProvider(api_key="your_key", model="qwen-plus")
+
+# Zhipu (智谱)
+from macs_pkg.llm import ZhipuProvider
+
+provider = ZhipuProvider(api_key="your_key", model="glm-4")
+```
+
+## 内置工具
+
+| 工具 | 功能 |
+|------|------|
+| `CalculatorTool` | 安全数学计算 |
+| `TextFormatterTool` | 文本格式化/统计 |
+| `FileReaderTool` | 文件读取 |
+| `FileWriterTool` | 文件写入 |
+| `HttpGetTool` | HTTP GET 请求 |
+| `JsonParserTool` | JSON 解析 |
+| `RAGSearchTool` | RAG 知识库检索 |
+| `DuckDuckGoSearchTool` | 免费网络搜索 |
+| `TavilySearchTool` | AI 增强搜索 |
+| `PythonCodeExecutorTool` | 安全 Python 代码执行 |
+
+### 工具使用示例
+
+```python
+from macs_pkg.tools import (
+    CalculatorTool,
+    DuckDuckGoSearchTool,
+    PythonCodeExecutorTool,
+    create_default_registry,
+)
+
+# 创建工具注册表
+registry = create_default_registry()
+
+# 添加搜索工具
+search_tool = DuckDuckGoSearchTool()
+result = await search_tool.run(query="深圳天气", num_results=5)
+
+# 添加代码执行
+code_tool = PythonCodeExecutorTool(timeout=30)
+result = await code_tool.run(code="print(sum(range(100)))")
+```
+
 ## 快速开始
 
 ### 基本用法
