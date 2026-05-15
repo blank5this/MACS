@@ -372,7 +372,20 @@ docker-compose down
 
 #### 6. 连接池管理 (openai_compatible.py:77-89)
 - **问题**：每次请求创建新的 `AsyncOpenAI` 客户端，有额外开销
-- **修复**：实现 `_get_client()` 方法复用客户端实例
+- **修复**：实现 `_get_client()` 方法复用客户端实例，添加 `openai.Timeout` 分离 connect/read/write/pool 超时
+
+### 额外优化 (2026-05-15 第二次)
+
+#### 7. _parse_json_content 纯文本降级
+- **问题**：LLM 返回纯文本时解析失败返回空 `{}`，导致 `final_output` 丢失
+- **修复**：返回 `{"final_output": content}` 而非空字典
+
+#### 8. _judge_quality 简化为纯数字响应
+- **问题**：要求 LLM 返回 JSON 格式的 `{"quality_score": 0.x}`，解析复杂易失败
+- **修复**：改为要求 LLM 返回纯数字（如 `0.75`），用 regex 提取
+  - 减少 token 消耗
+  - 避免 JSON 解析错误
+  - 更简单、更可靠
 
 ---
 
