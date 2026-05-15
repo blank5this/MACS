@@ -13,11 +13,58 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import random
+import re
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("llm_agents")
+
+
+def _parse_json_content(content: str) -> Dict[str, Any]:
+    """Parse JSON from LLM response with robust error handling.
+
+    Handles:
+    - Markdown code blocks (```json ... ```)
+    - Extra whitespace and newlines
+    - Partial JSON (tries to extract valid JSON prefix)
+    """
+    if not content:
+        return {}
+
+    # Strip whitespace
+    content = content.strip()
+
+    # Remove markdown code blocks
+    if content.startswith("```"):
+        content = re.sub(r"^```(?:json)?\s*", "", content)
+        content = re.sub(r"\s*```$", "", content)
+        content = content.strip()
+
+    if not content:
+        return {}
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        # Try to extract valid JSON prefix
+        try:
+            # Find the first { and last }
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            if start != -1 and end > start:
+                partial = content[start:end]
+                return json.loads(partial)
+        except json.JSONDecodeError:
+            pass
+
+    # Log warning for debugging
+    logger.warning(f"JSON parse failed, content preview: {content[:200]}")
+    return {}
+
+
 from ..agents.planner import PlannerAgent
 from ..agents.executor import ExecutorAgent
 from ..agents.reviewer import ReviewerAgent
@@ -69,7 +116,7 @@ class LLMPlannerAgent(ClaudeAgentMixin, PlannerAgent):
                 f"Decompose this task into subtasks:\n\n{task_text}",
                 max_tokens=1024,
             )
-            data = json.loads(response.content)
+            data = _parse_json_content(response.content)
             return data.get("subtasks", [])
         except (json.JSONDecodeError, Exception):
             # Graceful fallback
@@ -146,11 +193,11 @@ class LLMExecutorAgent(ClaudeAgentMixin, ExecutorAgent):
                     })
                 result_data["tool_calls"] = tool_results
 
-            # Parse LLM JSON response
-            try:
-                parsed = json.loads(response.content)
+            # Parse LLM JSON response using robust parser
+            parsed = _parse_json_content(response.content)
+            if parsed:
                 result_data.update(parsed)
-            except json.JSONDecodeError:
+            else:
                 result_data["final_output"] = response.content
 
             result_data.setdefault("subtask_id", subtask.get("id"))
@@ -239,7 +286,7 @@ class MiniMaxPlannerAgent(MiniMaxAgentMixin, PlannerAgent):
 
         try:
             response = await self._llm_chat(f"Decompose this task:\n\n{task_text}", max_tokens=1024)
-            data = json.loads(response.content)
+            data = _parse_json_content(response.content)
             return data.get("subtasks", [])
         except (json.JSONDecodeError, Exception):
             return await super()._decompose_task(task)
@@ -301,11 +348,22 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
         # MiniMax API doesn't support OpenAI tool format — rely on proactive RAG instead
         tools = None
 
-        # Self-correction loop
+        # Self-correction loop with exponential backoff
         last_error = None
         feedback_text = ""
         for attempt in range(max_correction_attempts):
             _bus = get_event_bus()
+
+            # Exponential backoff with jitter before retry (skip first attempt)
+            if attempt > 0:
+                base_delay = 0.5  # seconds
+                max_delay = 8.0
+                delay = min(base_delay * (2 ** (attempt - 1)), max_delay)
+                # Add jitter (±25%)
+                delay = delay * (0.75 + random.random() * 0.5)
+                logger.debug(f"Retry backoff: waiting {delay:.2f}s before attempt {attempt + 1}")
+                await asyncio.sleep(delay)
+
             await _bus.publish(Event(
                 type=EventType.CORRECTION_ATTEMPT_STARTED,
                 source=f"MiniMaxExecutorAgent:{task_id}",
@@ -328,15 +386,27 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
                 if response.tool_calls and self._tool_registry:
                     tool_results = []
                     for tc in response.tool_calls:
-                        args = tc["input"] if isinstance(tc["input"], dict) else json.loads(tc["input"])
+                        # Robust tool call input parsing
+                        input_data = tc.get("input")
+                        if isinstance(input_data, dict):
+                            args = input_data
+                        elif isinstance(input_data, str):
+                            try:
+                                args = json.loads(input_data) if input_data.strip() else {}
+                            except json.JSONDecodeError:
+                                logger.warning(f"Failed to parse tool call input: {input_data[:100]}")
+                                args = {}
+                        else:
+                            args = {}
                         tr = await self._tool_registry.invoke(tc["name"], **args)
                         tool_results.append({"tool": tc["name"], "result": tr.to_dict()})
                     result_data["tool_calls"] = tool_results
 
-                try:
-                    parsed = json.loads(response.content)
+                # Robust JSON parsing
+                parsed = _parse_json_content(response.content)
+                if parsed:
                     result_data.update(parsed)
-                except json.JSONDecodeError:
+                else:
                     result_data["final_output"] = response.content
 
                 result_data.setdefault("subtask_id", task_id)
@@ -431,8 +501,7 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
             )
             response = await self._llm_chat(judge_prompt, max_tokens=256)
 
-            import json as _json
-            parsed = _json.loads(response.content)
+            parsed = _parse_json_content(response.content)
             score = float(parsed.get("quality_score", 0.5))
             return max(0.0, min(1.0, score))
         except Exception:

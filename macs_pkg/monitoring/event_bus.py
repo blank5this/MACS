@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -49,6 +50,9 @@ class EventType(Enum):
     # System
     ERROR = "error"
     WARNING = "warning"
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -135,8 +139,8 @@ class EventBus:
                     await handler(event)
                 else:
                     handler(event)
-            except Exception:
-                pass  # Never let monitoring break the system
+            except Exception as e:
+                logger.warning(f"[EventBus] Handler error for {event.type.value}: {e}")
 
     def publish_sync(self, event: Event) -> None:
         """Fire-and-forget publish from sync contexts."""

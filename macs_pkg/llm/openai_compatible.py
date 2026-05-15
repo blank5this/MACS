@@ -74,6 +74,19 @@ class OpenAICompatibleProvider(LLMProvider):
         self._model = model
         self._timeout = timeout
         self._extra_headers = extra_headers or {}
+        # Reuse client instance to avoid connection overhead per request
+        self._client: Optional["openai.AsyncOpenAI"] = None
+
+    def _get_client(self) -> "openai.AsyncOpenAI":
+        """Get or create a shared AsyncOpenAI client (connection pooling)."""
+        import openai
+        if self._client is None:
+            self._client = openai.AsyncOpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                timeout=self._timeout,
+            )
+        return self._client
 
     def model_name(self) -> str:
         return self._model
@@ -147,15 +160,10 @@ class OpenAICompatibleProvider(LLMProvider):
 
         payload.update(kwargs)
 
-        # Make request with error handling
+        # Make request with pooled client
         try:
-            async with openai.AsyncOpenAI(
-                api_key=self._api_key,
-                base_url=self._base_url,
-                timeout=timeout,
-                default_headers=headers,
-            ) as client:
-                response = await client.chat.completions.create(**payload)
+            client = self._get_client()
+            response = await client.chat.completions.create(**payload)
         except openai.APITimeoutError as e:
             raise TimeoutError(f"LLM request timed out after {timeout}s: {e}") from e
         except openai.RateLimitError as e:
@@ -260,6 +268,8 @@ class MiniMaxAgentMixin:
         planner = MyPlannerAgent("planner", provider=provider)
     """
 
+    MAX_CONVERSATION_LENGTH = 100  # Prevent memory leak from unbounded history growth
+
     def __init__(self, *args: Any, provider: Optional[LLMProvider] = None, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self._provider: Optional[LLMProvider] = provider
@@ -287,6 +297,14 @@ class MiniMaxAgentMixin:
         )
 
         self._conversation.append(LLMMessage(role="assistant", content=response.content))
+
+        # Prevent memory leak: trim conversation if too long
+        if len(self._conversation) > self.MAX_CONVERSATION_LENGTH:
+            # Keep system prompt context + recent messages
+            # First message is usually system, keep it
+            keep_count = self.MAX_CONVERSATION_LENGTH // 2
+            self._conversation = self._conversation[:1] + self._conversation[-keep_count:]
+
         return response
 
     def clear_conversation(self) -> None:
