@@ -30,6 +30,7 @@ def _parse_json_content(content: str) -> Dict[str, Any]:
     - Markdown code blocks (```json ... ```)
     - Extra whitespace and newlines
     - Partial JSON (tries to extract valid JSON prefix)
+    - Plain text fallback: returns {"final_output": content} if not valid JSON
     """
     if not content:
         return {}
@@ -60,9 +61,9 @@ def _parse_json_content(content: str) -> Dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-    # Log warning for debugging
-    logger.warning(f"JSON parse failed, content preview: {content[:200]}")
-    return {}
+    # Not valid JSON - return as plain text in final_output
+    logger.debug(f"Response is not JSON, treating as plain text")
+    return {"final_output": content}
 
 
 from ..agents.planner import PlannerAgent
@@ -492,19 +493,31 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
     async def _judge_quality(self, output: str, task: str) -> float:
         """Judge the quality of an LLM output. Returns 0.0-1.0 score."""
         try:
+            # Truncate output to avoid token limit issues
+            output_preview = output[:400]
             judge_prompt = (
                 f"Task: {task}\n\n"
-                f"Output to evaluate: {output[:500]}\n\n"
-                f"Score the quality of this output for the task above.\n"
-                f"Consider: completeness (did it fully answer?), correctness (is it accurate?), relevance (is it on-topic?).\n"
-                f"Respond ONLY with a JSON object: {{\"quality_score\": 0.0-1.0}}"
+                f"Output to evaluate: {output_preview}\n\n"
+                f"Score the quality of this output (0.0=poor, 1.0=excellent).\n"
+                f"Respond with ONLY a number between 0.0 and 1.0 (e.g., 0.75)."
             )
-            response = await self._llm_chat(judge_prompt, max_tokens=256)
+            response = await self._llm_chat(judge_prompt, max_tokens=64)
 
-            parsed = _parse_json_content(response.content)
-            score = float(parsed.get("quality_score", 0.5))
-            return max(0.0, min(1.0, score))
-        except Exception:
+            # Parse the score - expect plain number
+            content = response.content.strip()
+
+            # Try to extract a number from the response
+            import re
+            match = re.search(r"0?\.\d+|[01]\.?\d*", content)
+            if match:
+                score = float(match.group())
+                return max(0.0, min(1.0, score))
+
+            # Fallback: if we can't parse a number, assume medium quality
+            logger.warning(f"Could not parse quality score from: {content[:50]}")
+            return 0.5
+        except Exception as e:
+            logger.warning(f"Quality judgment failed: {e}")
             return 0.5  # Default to 0.5 on error
 
 

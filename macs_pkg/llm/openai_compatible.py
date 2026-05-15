@@ -10,6 +10,10 @@ from typing import Any, Dict, List, Optional
 
 from .base import LLMMessage, LLMProvider, LLMResponse
 
+# Reusable client timeout settings
+DEFAULT_TIMEOUT = 60.0
+DEFAULT_CONNECT_TIMEOUT = 10.0
+
 
 class LLMError(Exception):
     """Base exception for LLM-related errors."""
@@ -78,13 +82,22 @@ class OpenAICompatibleProvider(LLMProvider):
         self._client: Optional["openai.AsyncOpenAI"] = None
 
     def _get_client(self) -> "openai.AsyncOpenAI":
-        """Get or create a shared AsyncOpenAI client (connection pooling)."""
+        """Get or create a shared AsyncOpenAI client (connection pooling).
+
+        Reuses a single client instance for all requests to pool connections
+        and reduce connection overhead.
+        """
         import openai
         if self._client is None:
             self._client = openai.AsyncOpenAI(
                 api_key=self._api_key,
                 base_url=self._base_url,
-                timeout=self._timeout,
+                timeout=openai.Timeout(
+                    connect=DEFAULT_CONNECT_TIMEOUT,
+                    read=self._timeout,
+                    write=self._timeout,
+                    pool=self._timeout,
+                ),
             )
         return self._client
 
