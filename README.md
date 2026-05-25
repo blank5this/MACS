@@ -115,7 +115,7 @@ result = await code_tool.run(code="print(sum(range(100)))")
 
 ```python
 import asyncio
-from macs.runtime.engine import create_runtime
+from macs_pkg import create_runtime
 
 async def main():
     # 创建运行时引擎
@@ -211,7 +211,7 @@ macs/
 ### 运行时配置
 
 ```python
-from macs.runtime.config import MACSConfig
+from macs_pkg.runtime.config import MACSConfig
 
 config = MACSConfig(
     default_model="gpt-4",
@@ -245,7 +245,7 @@ pytest macs/tests/ -v
 ### 自定义 Agent
 
 ```python
-from macs.core.agent import BaseAgent, AgentRole, Message
+from macs_pkg.core.agent import BaseAgent, AgentRole, Message
 
 class MyAgent(BaseAgent):
     def __init__(self, name):
@@ -263,7 +263,7 @@ class MyAgent(BaseAgent):
 ### 自定义协作模式
 
 ```python
-from macs.collaboration.base import CollaborationMode
+from macs_pkg.collaboration.base import CollaborationMode
 
 class MyMode(CollaborationMode):
     async def execute(self, task, agents, context=None):

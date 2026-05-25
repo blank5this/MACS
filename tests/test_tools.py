@@ -149,37 +149,37 @@ class TestTextFormatterTool:
 
     @pytest.mark.asyncio
     async def test_uppercase(self, tool):
-        result = await tool.run(text="hello world", format="uppercase")
+        result = await tool.run(text="hello world", operation="upper")
         assert result.success is True
         assert result.output == "HELLO WORLD"
 
     @pytest.mark.asyncio
     async def test_lowercase(self, tool):
-        result = await tool.run(text="HELLO", format="lowercase")
+        result = await tool.run(text="HELLO", operation="lower")
         assert result.success is True
         assert result.output == "hello"
 
     @pytest.mark.asyncio
     async def test_title_case(self, tool):
-        result = await tool.run(text="hello world", format="titlecase")
+        result = await tool.run(text="hello world", operation="title")
         assert result.success is True
         assert result.output == "Hello World"
 
     @pytest.mark.asyncio
     async def test_trim(self, tool):
-        result = await tool.run(text="  hello  ", format="trim")
+        result = await tool.run(text="  hello  ", operation="strip")
         assert result.success is True
         assert result.output == "hello"
 
     @pytest.mark.asyncio
     async def test_word_count(self, tool):
-        result = await tool.run(text="hello world", format="word_count")
+        result = await tool.run(text="hello world", operation="word_count")
         assert result.success is True
         assert result.output == 2
 
     @pytest.mark.asyncio
     async def test_reverse(self, tool):
-        result = await tool.run(text="hello", format="reverse")
+        result = await tool.run(text="hello", operation="reverse")
         assert result.success is True
         assert result.output == "olleh"
 
