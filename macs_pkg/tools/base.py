@@ -25,6 +25,24 @@ class ToolSpec:
     description: str
     parameters: List[ToolParameter] = field(default_factory=list)
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": [
+                {
+                    "name": p.name,
+                    "type": p.type,
+                    "description": p.description,
+                    "required": p.required,
+                    "default": p.default,
+                    "enum": p.enum,
+                }
+                for p in self.parameters
+            ],
+        }
+
     def to_openai_schema(self) -> Dict[str, Any]:
         """Export as OpenAI-style function schema."""
         properties = {}
