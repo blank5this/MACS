@@ -5,6 +5,7 @@ from .hierarchical import HierarchicalMode
 from .decentralized import DecentralizedMode
 from .pipeline import PipelineMode, ParallelPipelineMode
 from .dynamic_selector import DynamicSelector, AdaptiveSelector
+from .deep_research import DeepResearchMode
 
 __all__ = [
     "CollaborationMode",
@@ -16,4 +17,5 @@ __all__ = [
     "ParallelPipelineMode",
     "DynamicSelector",
     "AdaptiveSelector",
+    "DeepResearchMode",
 ]
