@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import asyncio
 
 from ..core.agent import BaseAgent, AgentRole, Message, AgentState
+from ..core.citation import CitationTracker
 
 try:
     from loguru import logger
@@ -52,6 +53,7 @@ class ReviewerAgent(BaseAgent):
         provider: Optional["LLMProvider"] = None,
         quality_threshold: float = 0.7,
         enable_llm: bool = True,
+        citation_tracker: Optional[CitationTracker] = None,
     ):
         super().__init__(
             name=name,
@@ -68,6 +70,7 @@ class ReviewerAgent(BaseAgent):
             "correctness",
             "relevance",
         ]
+        self._citation_tracker = citation_tracker or CitationTracker()
 
     def set_provider(self, provider: "LLMProvider") -> None:
         """Set the LLM provider for this agent.
@@ -543,3 +546,218 @@ Only respond with JSON."""
     def get_all_reviews(self) -> Dict[str, Dict[str, Any]]:
         """Get all stored reviews."""
         return self._reviews.copy()
+
+    @property
+    def citation_tracker(self) -> CitationTracker:
+        """Return the citation tracker instance."""
+        return self._citation_tracker
+
+    # ── Citation helpers ───────────────────────────────────────────────────────
+
+    def track_source(
+        self,
+        url: str,
+        title: str,
+        snippet: str = "",
+    ) -> str:
+        """Register a source and return its citation_id (e.g. 'source_1').
+
+        Args:
+            url: Source URL.
+            title: Display title.
+            snippet: Relevant excerpt.
+
+        Returns:
+            citation_id string to embed as [citation_id] in text.
+        """
+        label, _ = self._citation_tracker.track(
+            url=url,
+            title=title,
+            snippet=snippet,
+            agent_id=self.name,
+        )
+        return label
+
+    def bind_claim(
+        self,
+        claim_content: str,
+        source_ids: List[str],
+        turn: int = 0,
+    ) -> str:
+        """Bind one or more citations to a claim.
+
+        Args:
+            claim_content: Natural-language claim text.
+            source_ids: List of citation IDs from track_source().
+            turn: Session turn number.
+
+        Returns:
+            claim_id string.
+        """
+        return self._citation_tracker.bind_claim(
+            source_ids=source_ids,
+            claim_content=claim_content,
+            agent_id=self.name,
+            turn=turn,
+        )
+
+    def get_citation_graph(self) -> Dict[str, Any]:
+        """Return the full citation graph."""
+        return self._citation_tracker.get_citation_graph()
+
+    # ── Synthesis ─────────────────────────────────────────────────────────────
+
+    async def synthesize(
+        self,
+        sections: List[Dict[str, Any]],
+        *,
+        format: str = "markdown",
+        inject_citations: bool = True,
+    ) -> Dict[str, Any]:
+        """Synthesize a structured report from sections, binding citations.
+
+        Args:
+            sections: List of sections, each a dict with keys:
+                - title (str): Section heading.
+                - content (str): Section body. May contain [source_N] markers.
+                - evidence (List[Dict], optional): List of {"url", "title", "snippet"}.
+                - claims (List[str], optional): Claim texts to bind to evidence.
+            format: Output format ("markdown" | "html").
+            inject_citations: If True, call format_report() to format citation markers.
+
+        Returns:
+            Dict with keys:
+                - report (str): Formatted report body.
+                - citation_graph (dict): Full citation graph from get_citation_graph().
+                - citations (list): List of all Citation dicts.
+                - claim_count (int): Number of bound claims.
+        """
+        if self._enable_llm and self._provider is not None:
+            return await self._synthesize_with_llm(sections, format=format, inject_citations=inject_citations)
+        return self._synthesize_simple(sections, format=format, inject_citations=inject_citations)
+
+    async def _synthesize_with_llm(
+        self,
+        sections: List[Dict[str, Any]],
+        format: str,
+        inject_citations: bool,
+    ) -> Dict[str, Any]:
+        """LLM-powered synthesis with citation binding."""
+        from ..llm.base import LLMMessage
+        import json
+
+        # First pass: register all evidence sources
+        for section in sections:
+            for ev in section.get("evidence", []):
+                self.track_source(
+                    url=ev.get("url", ""),
+                    title=ev.get("title", ""),
+                    snippet=ev.get("snippet", ""),
+                )
+
+        # Second pass: bind claims
+        for section in sections:
+            for claim in section.get("claims", []):
+                self.bind_claim(
+                    claim_content=claim,
+                    source_ids=list(self._citation_tracker._citations.keys()),
+                    turn=0,
+                )
+
+        # Build synthesis prompt
+        sections_json = json.dumps(sections, indent=2, default=str)
+        prompt = f"""You are a research report synthesizer.
+
+Given the following sections with evidence, produce a cohesive, well-structured report.
+
+Sections:
+{sections_json}
+
+Requirements:
+1. Integrate [source_N] markers where claims are made (e.g. "The sky is blue[source_1][source_2]").
+2. Do NOT invent citation numbers — only use the markers already present in the sections.
+3. Output ONLY the report content (no preamble or explanation).
+4. Follow this structure: Abstract → Background → Findings → Conclusion → References.
+
+Respond with JSON:
+{{
+  "report": "full report text with [source_N] markers in place",
+}}
+
+Only respond with JSON."""
+
+        try:
+            response = await self._provider.complete(
+                messages=[LLMMessage(role="user", content=prompt)],
+                system="You are a precise research report synthesizer. Cite all claims.",
+                max_tokens=4096,
+                temperature=0.3,
+            )
+
+            report_text = response.content.strip()
+            if "```json" in report_text:
+                start = report_text.find("```json") + 7
+                end = report_text.find("```", start)
+                report_text = report_text[start:end]
+            elif "```" in report_text:
+                start = report_text.find("```") + 3
+                end = report_text.find("```", start)
+                report_text = report_text[start:end]
+
+            parsed = json.loads(report_text)
+            report_body = parsed.get("report", report_text)
+        except (json.JSONDecodeError, Exception) as e:
+            logger.warning(f"LLM synthesis failed: {e}, using simple fallback")
+            report_body = self._plaintext_synthesis(sections)
+
+        if inject_citations:
+            citations_list = list(self._citation_tracker._citations.values())
+            report_body = self._citation_tracker.format_report(
+                report_body, inline=True, footnotes=True
+            )
+        else:
+            citations_list = list(self._citation_tracker._citations.values())
+
+        return {
+            "report": report_body,
+            "citation_graph": self._citation_tracker.get_citation_graph(),
+            "citations": [self._citation_tracker._citation_to_dict(c) for c in citations_list],
+            "claim_count": len(self._citation_tracker._claims),
+        }
+
+    def _synthesize_simple(
+        self,
+        sections: List[Dict[str, Any]],
+        format: str,
+        inject_citations: bool,
+    ) -> Dict[str, Any]:
+        """Fallback synthesis without LLM — straight concatenation."""
+        lines = []
+        for section in sections:
+            lines.append(f"## {section.get('title', '')}\n{section.get('content', '')}")
+
+        report_body = "\n\n".join(lines)
+
+        if inject_citations:
+            report_body = self._citation_tracker.format_report(
+                report_body, inline=True, footnotes=True
+            )
+
+        return {
+            "report": report_body,
+            "citation_graph": self._citation_tracker.get_citation_graph(),
+            "citations": [
+                self._citation_tracker._citation_to_dict(c)
+                for c in self._citation_tracker._citations.values()
+            ],
+            "claim_count": len(self._citation_tracker._claims),
+        }
+
+    def _plaintext_synthesis(self, sections: List[Dict[str, Any]]) -> str:
+        """Simple concatenation for fallback."""
+        parts = []
+        for section in sections:
+            title = section.get("title", "")
+            content = section.get("content", "")
+            parts.append(f"## {title}\n{content}")
+        return "\n\n".join(parts)

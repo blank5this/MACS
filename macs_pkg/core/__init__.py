@@ -10,6 +10,8 @@ from .agent_template import (
     AgentTemplateConfig,
     get_template_registry,
 )
+from .citation import CitationTracker, Citation, Claim
+from .react_agent import ReactAgent
 
 __all__ = [
     "BaseAgent",
@@ -20,4 +22,8 @@ __all__ = [
     "AgentTemplateRegistry",
     "AgentTemplateConfig",
     "get_template_registry",
+    "CitationTracker",
+    "Citation",
+    "Claim",
+    "ReactAgent",
 ]
