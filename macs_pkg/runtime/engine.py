@@ -86,6 +86,13 @@ class RuntimeEngine:
         self._task_history: List[Dict[str, Any]] = []
         self._shared_memory: Optional["SharedMemory"] = None
 
+        # v1.0.1: track the last exception so callers (workflows,
+        # health checks) can introspect what really went wrong even
+        # when ``stop_on_error=False`` and the engine returned a
+        # dict-shaped error instead of raising.
+        self.last_error: Optional[BaseException] = None
+        self.last_error_task_id: Optional[str] = None
+
         # Initialize tracing if enabled
         self._tracer: Optional["ExecutionTracer"] = None
         if self.config.enable_tracing:
@@ -351,7 +358,20 @@ class RuntimeEngine:
         collaboration_mode: "CollaborationMode",
         error: Exception,
     ) -> Dict[str, Any]:
-        """Record failed task."""
+        """Record failed task.
+
+        v1.0.1: surface the original exception on :attr:`last_error`
+        and include the exception class name in the returned dict
+        under :data:`error_type`. Previously the engine swallowed
+        everything into ``{"error": str(error)}`` with no way for
+        callers to distinguish, e.g., a network timeout from a
+        malformed-payload error.
+        """
+        # Expose the raw exception so callers can ``isinstance``-check
+        # it without parsing the stringified error message.
+        self.last_error = error
+        self.last_error_task_id = task_id
+
         if self._tracer:
             for agent_name in self._agents:
                 self._tracer.trace_error(agent_name, str(error), {"task_id": task_id})
@@ -361,6 +381,7 @@ class RuntimeEngine:
             "task": task,
             "mode": collaboration_mode.name,
             "error": str(error),
+            "error_type": type(error).__name__,
             "status": "failed",
         })
 
@@ -368,13 +389,21 @@ class RuntimeEngine:
         await _bus.publish(Event(
             type=EventType.TASK_FAILED,
             source="runtime",
-            data={"task_id": task_id, "mode": collaboration_mode.name, "error": str(error)},
+            data={
+                "task_id": task_id,
+                "mode": collaboration_mode.name,
+                "error": str(error),
+                "error_type": type(error).__name__,
+            },
         ))
 
         if self.config.stop_on_error:
             raise
 
-        return {"error": str(error)}
+        return {
+            "error": str(error),
+            "error_type": type(error).__name__,
+        }
 
     async def execute(
         self,

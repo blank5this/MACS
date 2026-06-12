@@ -1,5 +1,5 @@
 # MACS Docker Compose Configuration
-version: '3.8'
+# Note: 'version' is obsolete in Compose v2+ and is ignored.
 
 services:
   # Development environment
@@ -56,3 +56,76 @@ services:
     command: pytest tests/ -v --tb=short
     profiles:
       - test  # Only run with: docker-compose --profile test up
+
+  # PostgreSQL for ERP AI Copilot
+  postgres:
+    image: postgres:16-alpine
+    container_name: macs-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-erp_copilot}
+      - POSTGRES_USER=${POSTGRES_USER:-erp}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-erp_pass}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erp} -d ${POSTGRES_DB:-erp_copilot}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ERP seed/init: runs schema + seed once and exits
+  erp-init:
+    build:
+      context: .
+      target: development
+    container_name: macs-erp-init
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-erp_copilot}
+      - POSTGRES_USER=${POSTGRES_USER:-erp}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-erp_pass}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./macs_pkg:/app/macs_pkg:rw
+      - ./scripts:/app/scripts:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "python scripts/seed_erp_db.py --scale $${ERP_SEED_SCALE:-small}"
+    profiles:
+      - erp  # Only run with: docker-compose --profile erp up erp-init
+
+  # ERP web UI service (FastAPI)
+  erp-web:
+    build:
+      context: .
+      target: development
+    container_name: macs-erp-web
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-erp_copilot}
+      - POSTGRES_USER=${POSTGRES_USER:-erp}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-erp_pass}
+      - PYTHONUNBUFFERED=1
+      - MACS_LOG_LEVEL=INFO
+    ports:
+      - "${ERP_WEB_PORT:-8001}:8000"
+    volumes:
+      - ./macs_pkg:/app/macs_pkg:rw
+      - ./examples:/app/examples:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn macs_pkg.erp.web.app:app --host 0.0.0.0 --port 8000 --reload
+    profiles:
+      - erp
+
+volumes:
+  pgdata:
+    driver: local
