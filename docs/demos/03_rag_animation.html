@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MACS ERP Copilot — RAG 知识库演示 (60s 动画)</title>
+<style>
+  /* ============================================
+     配色变量: 跟 macs_pkg/erp/web/static/index.html 一致
+     ============================================ */
+  :root {
+    --bg: #0e1217;
+    --panel: #161b22;
+    --panel-2: #1c2229;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: linear-gradient(135deg, #0a0d12 0%, #0e1217 100%);
+    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas,
+                 "Courier New", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", monospace;
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 16px;
+  }
+
+  /* ============================================
+     外层终端卡片
+     ============================================ */
+  .terminal-wrapper {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    max-width: 900px;
+    width: 100%;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(88,166,255,0.1);
+  }
+
+  /* 顶部 macOS 风窗口控制条 */
+  .terminal-header {
+    display: flex;
+    align-items: center;
+    background: var(--panel);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+  }
+
+  .window-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot-r { background: #ff5f57; }
+  .dot-y { background: #febc2e; }
+  .dot-g { background: #28c840; }
+
+  .title {
+    flex: 1;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .controls {
+    display: flex;
+    gap: 6px;
+  }
+
+  .controls button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .controls button:hover {
+    background: var(--border);
+    border-color: var(--accent);
+  }
+  .controls button.active {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  /* ============================================
+     进度条
+     ============================================ */
+  .progress-bar {
+    position: relative;
+    height: 4px;
+    background: var(--panel-2);
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--ok));
+    width: 0%;
+    transition: width 0.05s linear;
+  }
+
+  .progress-slider {
+    position: absolute;
+    top: -7px;
+    left: 0;
+    width: 100%;
+    height: 18px;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  /* ============================================
+     终端主体
+     ============================================ */
+  .terminal-body {
+    padding: 20px 24px;
+    min-height: 480px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* ============================================
+     Stage 通用: opacity 0 → 1, 上移 8px
+     ============================================ */
+  .stage {
+    display: none;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+  }
+  .stage.active {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ============================================
+     阶段 1: 启动
+     ============================================ */
+  .banner {
+    color: var(--accent);
+    font-weight: 600;
+    white-space: pre;
+    line-height: 1.4;
+  }
+
+  .banner-line {
+    display: block;
+    opacity: 0;
+  }
+  .banner-line.show { opacity: 1; }
+
+  .stats {
+    margin-top: 12px;
+    color: var(--text);
+  }
+
+  .stat-line {
+    opacity: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+  }
+  .stat-line.show { opacity: 1; }
+
+  .stat-bullet {
+    color: var(--accent);
+  }
+  .stat-count {
+    color: var(--muted);
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-folder {
+    color: var(--warn);
+  }
+
+  /* ============================================
+     阶段 2/3/4: 查询 + 结果卡片
+     ============================================ */
+  .query-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 12px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+
+  .badge {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-query {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .badge-cross {
+    background: var(--warn);
+    color: var(--bg);
+    animation: pulse 1s ease-in-out 2;
+  }
+
+  .query-text {
+    color: var(--text);
+    font-weight: 500;
+    flex: 1;
+  }
+
+  .typing-cursor {
+    display: inline-block;
+    color: var(--accent);
+    animation: blink 0.8s ease-in-out infinite;
+    font-weight: 600;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.05); }
+  }
+
+  .result-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .result-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 8px 12px;
+    opacity: 0;
+    transform: translateX(-8px);
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+  }
+  .result-card.show {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .rank {
+    color: var(--muted);
+    font-weight: 600;
+    min-width: 24px;
+  }
+
+  .score {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  .score-high {
+    color: var(--ok);
+    background: rgba(63, 185, 80, 0.1);
+    border: 1px solid rgba(63, 185, 80, 0.3);
+  }
+  .score-mid {
+    color: var(--warn);
+    background: rgba(210, 153, 34, 0.1);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+  }
+
+  .cat {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: auto;
+  }
+
+  .card-title {
+    color: var(--text);
+    font-weight: 500;
+    font-size: 12.5px;
+  }
+
+  .card-path {
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .card-snippet {
+    color: var(--muted);
+    font-size: 11.5px;
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  .timing {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+    text-align: right;
+    color: var(--muted);
+    font-size: 11.5px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .timing.show { opacity: 1; }
+  .timing .latency { color: var(--ok); font-weight: 600; }
+  .timing .hits { color: var(--accent); font-weight: 600; }
+
+  /* ============================================
+     阶段 5: 总结卡
+     ============================================ */
+  .summary {
+    text-align: center;
+    padding: 16px 0;
+  }
+
+  .summary-divider {
+    color: var(--muted);
+    margin: 8px 0;
+  }
+
+  .summary-title {
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+    margin: 4px 0 12px;
+  }
+
+  .summary-stats {
+    font-size: 18px;
+    color: var(--text);
+    margin: 12px 0;
+    font-weight: 500;
+  }
+  .summary-stats .num {
+    color: var(--ok);
+    font-weight: 700;
+    font-size: 22px;
+  }
+  .summary-stats .hit {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 22px;
+  }
+
+  .summary-tech {
+    margin: 14px auto;
+    max-width: 360px;
+    text-align: left;
+  }
+
+  .tech-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  .tech-bullet {
+    color: var(--accent);
+  }
+
+  .summary-footer {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .summary-footer .org {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .version-tag {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+
+  /* ============================================
+     底部状态栏
+     ============================================ */
+  .terminal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 14px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .status-time { font-variant-numeric: tabular-nums; }
+  .status-stage .stage-num { color: var(--accent); font-weight: 600; }
+
+  /* ============================================
+     移动端适配
+     ============================================ */
+  @media (max-width: 640px) {
+    body { padding: 8px; }
+    .terminal-body { padding: 14px 16px; font-size: 12px; }
+    .title { font-size: 11px; }
+  }
+
+  /* ============================================
+     暂停遮罩
+     ============================================ */
+  .paused-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(14, 18, 23, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+    pointer-events: none;
+    border-radius: 10px;
+  }
+  .paused-overlay.show { display: flex; }
+  .terminal-wrapper { position: relative; }
+</style>
+</head>
+<body>
+
+<div class="terminal-wrapper">
+  <!-- 顶部控制条 -->
+  <div class="terminal-header">
+    <div class="window-dots">
+      <span class="dot dot-r"></span>
+      <span class="dot dot-y"></span>
+      <span class="dot dot-g"></span>
+    </div>
+    <div class="title">MACS ERP Copilot — RAG 知识库演示</div>
+    <div class="controls">
+      <button class="btn-pause" id="btn-pause" title="暂停/继续">⏯</button>
+      <button class="btn-reset" id="btn-reset" title="重播">↻</button>
+      <button class="btn-fullscreen" id="btn-fs" title="全屏">⛶</button>
+    </div>
+  </div>
+
+  <!-- 进度条 -->
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress-fill"></div>
+    <input type="range" class="progress-slider" id="progress-slider"
+           min="0" max="60" step="0.1" value="0">
+  </div>
+
+  <!-- 终端主体 -->
+  <div class="terminal-body" id="terminal-body">
+
+    <!-- 阶段 1: 启动 (0-12s) -->
+    <div class="stage" id="stage-1">
+      <div class="banner">
+        <span class="banner-line" data-line="0">============================================================</span>
+        <span class="banner-line" data-line="1">  MACS ERP Copilot</span>
+        <span class="banner-line" data-line="2">  Day 14 — RAG 知识库演示  (v1.0.0-erp-copilot)</span>
+        <span class="banner-line" data-line="3">============================================================</span>
+      </div>
+      <div class="stats">
+        <div class="stat-line" data-stat="0">知识库路径: <span style="color:var(--muted)">E:\MACS\data\erp_kb</span></div>
+        <div class="stat-line" data-stat="1">文档总数: <span style="color:var(--ok);font-weight:600">18 篇</span></div>
+        <div class="stat-line" data-stat="2" style="color:var(--muted)">按子目录:</div>
+        <div class="stat-line" data-stat="3">
+          <span class="stat-bullet">•</span>
+          <span class="stat-folder">01_operations</span>
+          <span class="stat-count">6 篇</span>
+        </div>
+        <div class="stat-line" data-stat="4">
+          <span class="stat-bullet">•</span>
+          <span class="stat-folder">02_warehouse</span>
+          <span class="stat-count">4 篇</span>
+        </div>
+        <div class="stat-line" data-stat="5">
+          <span class="stat-bullet">•</span>
+          <span class="stat-folder">03_procurement</span>
+          <span class="stat-count">5 篇</span>
+        </div>
+        <div class="stat-line" data-stat="6">
+          <span class="stat-bullet">•</span>
+          <span class="stat-folder">04_finance</span>
+          <span class="stat-count">3 篇</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 阶段 2: Q1 采购退货 (12-25s) -->
+    <div class="stage" id="stage-2">
+      <div class="query-banner">
+        <span class="badge badge-query">Q1</span>
+        <span class="query-text" data-typing="q1">如何处理采购退货?</span>
+        <span class="typing-cursor" data-cursor="q1">▌</span>
+      </div>
+      <div class="result-list">
+        <div class="result-card" data-rank="1">
+          <div class="card-head">
+            <span class="rank">#1</span>
+            <span class="score score-high">1.000</span>
+            <span class="cat">operations</span>
+          </div>
+          <div class="card-title">退货处理流程</div>
+          <div class="card-path">01_operations\03_退货处理流程.md</div>
+        </div>
+        <div class="result-card" data-rank="2">
+          <div class="card-head">
+            <span class="rank">#2</span>
+            <span class="score score-high">1.000</span>
+            <span class="cat">operations</span>
+          </div>
+          <div class="card-title">退货处理流程</div>
+          <div class="card-path">01_operations\03_退货处理流程.md</div>
+        </div>
+        <div class="result-card" data-rank="3">
+          <div class="card-head">
+            <span class="rank">#3</span>
+            <span class="score score-mid">0.984</span>
+            <span class="cat">operations</span>
+          </div>
+          <div class="card-title">退货分级</div>
+          <div class="card-path">01_operations\03_退货处理流程.md</div>
+        </div>
+      </div>
+      <div class="timing" data-timing="s2">
+        <span class="latency">29ms</span> ·
+        <span class="hits">3 段命中</span>
+      </div>
+    </div>
+
+    <!-- 阶段 3: Q2 MOQ 政策 (25-40s) -->
+    <div class="stage" id="stage-3">
+      <div class="query-banner">
+        <span class="badge badge-query">Q2</span>
+        <span class="query-text" data-typing="q2">MOQ 政策是什么? 起订量怎么定?</span>
+        <span class="typing-cursor" data-cursor="q2">▌</span>
+      </div>
+      <div class="result-list">
+        <div class="result-card" data-rank="1">
+          <div class="card-head">
+            <span class="rank">#1</span>
+            <span class="score score-high">1.000</span>
+            <span class="cat">warehouse</span>
+          </div>
+          <div class="card-title">B 类物料 (常规管理)</div>
+          <div class="card-path">02_warehouse\01_ABC分析法.md</div>
+          <div class="card-snippet">中等安全库存(14-30 天用量) · 经济订货量 (EOQ) 模型</div>
+        </div>
+        <div class="result-card" data-rank="2">
+          <div class="card-head">
+            <span class="rank">#2</span>
+            <span class="score score-high">1.000</span>
+            <span class="cat">warehouse</span>
+          </div>
+          <div class="card-title">B 类物料 (常规管理)</div>
+          <div class="card-path">02_warehouse\01_ABC分析法.md</div>
+        </div>
+        <div class="result-card" data-rank="3">
+          <div class="card-head">
+            <span class="rank">#3</span>
+            <span class="score score-mid">0.984</span>
+            <span class="cat">operations</span>
+          </div>
+          <div class="card-title">应对策略</div>
+          <div class="card-path">01_operations\02_Lead_Time_策略.md</div>
+        </div>
+      </div>
+      <div style="margin-top: 10px; text-align: center;">
+        <span class="badge badge-cross">✦ 跨文档命中 (warehouse + operations)</span>
+      </div>
+      <div class="timing" data-timing="s3">
+        <span class="latency">38ms</span> ·
+        <span class="hits">3 段命中</span>
+      </div>
+    </div>
+
+    <!-- 阶段 4: Q3 ABC 分析 (40-55s) -->
+    <div class="stage" id="stage-4">
+      <div class="query-banner">
+        <span class="badge badge-query">Q3</span>
+        <span class="query-text" data-typing="q3">ABC 分析法如何使用?</span>
+        <span class="typing-cursor" data-cursor="q3">▌</span>
+      </div>
+      <div class="result-list">
+        <div class="result-card" data-rank="1">
+          <div class="card-head">
+            <span class="rank">#1</span>
+            <span class="score score-high">1.000</span>
+            <span class="cat">warehouse</span>
+          </div>
+          <div class="card-title">ABC 分析法 (库存分类管理)</div>
+          <div class="card-path">02_warehouse\01_ABC分析法.md</div>
+        </div>
+        <div class="result-card" data-rank="2">
+          <div class="card-head">
+            <span class="rank">#2</span>
+            <span class="score score-high">1.000</span>
+            <span class="cat">warehouse</span>
+          </div>
+          <div class="card-title">ABC 分析法 (库存分类管理)</div>
+          <div class="card-path">02_warehouse\01_ABC分析法.md</div>
+        </div>
+        <div class="result-card" data-rank="3">
+          <div class="card-head">
+            <span class="rank">#3</span>
+            <span class="score score-mid">0.984</span>
+            <span class="cat">warehouse</span>
+          </div>
+          <div class="card-title">概述</div>
+          <div class="card-path">02_warehouse\01_ABC分析法.md</div>
+          <div class="card-snippet">"ABC 分析法根据物料的价值和数量将库存分为三类,实施差异化管理策略"</div>
+        </div>
+      </div>
+      <div class="timing" data-timing="s4">
+        <span class="latency">47ms</span> ·
+        <span class="hits">3 段命中</span>
+      </div>
+    </div>
+
+    <!-- 阶段 5: 总结 (55-60s) -->
+    <div class="stage" id="stage-5">
+      <div class="summary">
+        <div class="summary-divider">------------------------------------------------------------</div>
+        <div class="summary-title">RAG 知识库演示 — 一句话总结</div>
+        <div class="summary-divider">------------------------------------------------------------</div>
+        <div class="summary-stats">
+          <span class="num">3</span> 个问题 ·
+          <span class="hit">9</span> 个片段 ·
+          <span class="num">100%</span> 中文混合检索命中
+        </div>
+        <div class="summary-tech">
+          <div class="tech-row"><span class="tech-bullet">•</span> 中文 char-ngram embedding (字粒度)</div>
+          <div class="tech-row"><span class="tech-bullet">•</span> BM25 关键词评分</div>
+          <div class="tech-row"><span class="tech-bullet">•</span> RRF 倒数秩融合 (Reciprocal Rank Fusion)</div>
+        </div>
+        <div class="summary-footer">
+          文档来源: <span style="color:var(--text)">data/erp_kb/</span> (17 篇 .md)<br>
+          持久化: <span style="color:var(--text)">~/.macs/erp_rag/</span><br>
+          代码: <span class="org">github.com/blank5this/MACS</span>
+          <div class="version-tag">v1.0.1-erp-copilot</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 暂停遮罩 -->
+  <div class="paused-overlay" id="paused-overlay">⏸ 已暂停 (移动鼠标离开恢复)</div>
+
+  <!-- 底部状态栏 -->
+  <div class="terminal-footer">
+    <span class="status-time" id="status-time">00:00 / 01:00</span>
+    <span class="status-stage" id="status-stage">阶段 <span class="stage-num">1</span> / 5</span>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ============================================
+// 配置
+// ============================================
+const TOTAL = 60;  // 总时长秒
+const STAGES = [
+  { id: 'stage-1', start: 0,  end: 12, name: '启动' },
+  { id: 'stage-2', start: 12, end: 25, name: 'Q1 采购退货' },
+  { id: 'stage-3', start: 25, end: 40, name: 'Q2 MOQ 政策' },
+  { id: 'stage-4', start: 40, end: 55, name: 'Q3 ABC 分析' },
+  { id: 'stage-5', start: 55, end: 60, name: '总结' },
+];
+
+// ============================================
+// 状态
+// ============================================
+let startTime = performance.now();
+let paused = false;
+let currentT = 0;
+let raf = null;
+let typingJobs = {};   // q1/q2/q3 打字机是否完成
+let cardShown = {};    // 每个 stage 的卡片是否显示
+
+// ============================================
+// DOM 引用
+// ============================================
+const terminalBody = document.getElementById('terminal-body');
+const progressFill = document.getElementById('progress-fill');
+const progressSlider = document.getElementById('progress-slider');
+const statusTime = document.getElementById('status-time');
+const statusStage = document.getElementById('status-stage');
+const btnPause = document.getElementById('btn-pause');
+const btnReset = document.getElementById('btn-reset');
+const btnFs = document.getElementById('btn-fs');
+const pausedOverlay = document.getElementById('paused-overlay');
+const wrapper = document.querySelector('.terminal-wrapper');
+
+// ============================================
+// 阶段切换: 显示当前 t 对应的 stage, 隐藏其他
+// ============================================
+function setActiveStage(t) {
+  STAGES.forEach((s, idx) => {
+    const el = document.getElementById(s.id);
+    if (t >= s.start && t < s.end) {
+      if (!el.classList.contains('active')) {
+        el.classList.add('active');
+        // 重置 stage 内的子元素 (除阶段 1/5 卡片外的全淡入)
+        if (s.id === 'stage-1') resetStage1();
+        else if (s.id === 'stage-5') { /* 整段淡入 */ }
+        else resetQueryStage(s.id);
+      }
+    } else {
+      el.classList.remove('active');
+    }
+  });
+}
+
+function resetStage1() {
+  document.querySelectorAll('#stage-1 .banner-line, #stage-1 .stat-line')
+    .forEach(el => el.classList.remove('show'));
+}
+
+function resetQueryStage(stageId) {
+  // 隐藏所有 result-card 和 timing
+  document.querySelectorAll(`#${stageId} .result-card`).forEach(el => el.classList.remove('show'));
+  const timing = document.querySelector(`#${stageId} [data-timing]`);
+  if (timing) timing.classList.remove('show');
+  // 重置打字机
+  const stageNum = stageId.replace('stage-', '');
+  const typing = document.querySelector(`#${stageId} [data-typing="q${stageNum}"]`);
+  const cursor = document.querySelector(`#${stageId} [data-cursor="q${stageNum}"]`);
+  if (typing) typing.textContent = '';
+  if (cursor) cursor.style.display = 'inline-block';
+  typingJobs[`q${stageNum}`] = false;
+}
+
+// ============================================
+// 打字机: 按字符逐个 append
+// ============================================
+function typeText(el, text, speed = 60) {
+  return new Promise(resolve => {
+    let i = 0;
+    const tick = () => {
+      if (i < text.length) {
+        el.textContent = text.substring(0, i + 1);
+        i++;
+        setTimeout(tick, speed);
+      } else {
+        resolve();
+      }
+    };
+    tick();
+  });
+}
+
+async function tryStartTyping(stageNum, text) {
+  const key = `q${stageNum}`;
+  if (typingJobs[key]) return;
+  typingJobs[key] = true;
+  const stage = document.getElementById(`stage-${stageNum}`);
+  if (!stage || !stage.classList.contains('active')) return;
+  const typing = stage.querySelector(`[data-typing="q${stageNum}"]`);
+  const cursor = stage.querySelector(`[data-cursor="q${stageNum}"]`);
+  if (!typing) return;
+  await typeText(typing, text, 55);
+  if (cursor) cursor.style.display = 'none';
+}
+
+// ============================================
+// 阶段 1 子事件: banner 逐行 + stat 逐行
+// ============================================
+function updateStage1(t) {
+  const s1 = document.getElementById('stage-1');
+  if (!s1.classList.contains('active')) return;
+  // banner: 0.3-3.5s 每 0.7s 显示一行 (4 行)
+  const bannerTimes = [0.3, 0.9, 1.5, 2.1];
+  document.querySelectorAll('#stage-1 .banner-line').forEach((el, i) => {
+    if (t >= bannerTimes[i]) el.classList.add('show');
+  });
+  // stat: 3.0s 起每 0.3s 显示一行 (7 行)
+  const statTimes = [3.0, 3.4, 3.8, 4.2, 4.5, 4.8, 5.1];
+  document.querySelectorAll('#stage-1 .stat-line').forEach((el, i) => {
+    if (t >= statTimes[i]) el.classList.add('show');
+  });
+}
+
+// ============================================
+// 阶段 2/3/4: 打字机 + 卡片 stagger + timing
+// ============================================
+async function updateQueryStage(stageNum, t, question, cardTimes, timingTime) {
+  const stage = document.getElementById(`stage-${stageNum}`);
+  if (!stage.classList.contains('active')) return;
+
+  // 打字机: 阶段开始 + 0.3s 启动
+  if (t >= STAGES[stageNum - 1].start + 0.3) {
+    tryStartTyping(stageNum, question);
+  }
+
+  // 卡片 stagger
+  document.querySelectorAll(`#stage-${stageNum} .result-card`).forEach((el, i) => {
+    if (t >= cardTimes[i]) el.classList.add('show');
+  });
+
+  // timing
+  const timing = document.querySelector(`#stage-${stageNum} [data-timing]`);
+  if (timing && t >= timingTime) timing.classList.add('show');
+}
+
+// ============================================
+// 进度条 + 状态栏更新
+// ============================================
+function updateChrome(t) {
+  const pct = (t / TOTAL) * 100;
+  progressFill.style.width = pct + '%';
+  if (!progressSlider.matches(':active')) {
+    progressSlider.value = t;
+  }
+  // 时间
+  const mm = Math.floor(t / 60).toString().padStart(2, '0');
+  const ss = Math.floor(t % 60).toString().padStart(2, '0');
+  statusTime.textContent = `${mm}:${ss} / 01:00`;
+  // 阶段
+  const stage = STAGES.find(s => t >= s.start && t < s.end) || STAGES[STAGES.length - 1];
+  const stageIdx = STAGES.indexOf(stage) + 1;
+  statusStage.innerHTML = `阶段 <span class="stage-num">${stageIdx}</span> / 5 · ${stage.name}`;
+}
+
+// ============================================
+// 主 tick 循环
+// ============================================
+function tick(now) {
+  if (paused) return;
+  const t = ((now - startTime) / 1000) % TOTAL;
+  currentT = t;
+
+  setActiveStage(t);
+  updateStage1(t);
+
+  // Q1 12.3-25s
+  updateQueryStage(2, t, '如何处理采购退货?',
+    [14.0, 14.5, 15.0], 15.5);
+  // Q2 25.3-40s
+  updateQueryStage(3, t, 'MOQ 政策是什么? 起订量怎么定?',
+    [27.5, 28.0, 28.5], 29.5);
+  // Q3 40.3-55s
+  updateQueryStage(4, t, 'ABC 分析法如何使用?',
+    [42.0, 42.5, 43.0], 44.0);
+
+  updateChrome(t);
+  raf = requestAnimationFrame(tick);
+}
+
+// ============================================
+// 暂停/继续
+// ============================================
+function pause() {
+  paused = true;
+  if (raf) cancelAnimationFrame(raf);
+  btnPause.classList.add('active');
+  btnPause.textContent = '▶';
+  pausedOverlay.classList.add('show');
+}
+
+function play() {
+  if (!paused) return;
+  // 重新校准 startTime 让 currentT 保持不变
+  startTime = performance.now() - currentT * 1000;
+  paused = false;
+  btnPause.classList.remove('active');
+  btnPause.textContent = '⏯';
+  pausedOverlay.classList.remove('show');
+  raf = requestAnimationFrame(tick);
+}
+
+function togglePause() {
+  if (paused) play();
+  else pause();
+}
+
+// ============================================
+// 重置
+// ============================================
+function reset() {
+  pause();
+  startTime = performance.now();
+  currentT = 0;
+  // 隐藏所有 stage
+  STAGES.forEach(s => {
+    const el = document.getElementById(s.id);
+    el.classList.remove('active');
+  });
+  // 重置打字机
+  typingJobs = {};
+  // 重置卡片
+  document.querySelectorAll('.result-card, .timing, .banner-line, .stat-line')
+    .forEach(el => el.classList.remove('show'));
+  document.querySelectorAll('[data-typing]').forEach(el => el.textContent = '');
+  document.querySelectorAll('[data-cursor]').forEach(el => el.style.display = 'inline-block');
+  updateChrome(0);
+  // 自动开始
+  setTimeout(() => play(), 100);
+}
+
+// ============================================
+// 进度条拖动
+// ============================================
+progressSlider.addEventListener('input', e => {
+  const t = +e.target.value;
+  pause();
+  currentT = t;
+  startTime = performance.now() - t * 1000;
+  // 立即渲染该时刻
+  setActiveStage(t);
+  updateStage1(t);
+  updateQueryStage(2, t, '如何处理采购退货?', [14.0, 14.5, 15.0], 15.5);
+  updateQueryStage(3, t, 'MOQ 政策是什么? 起订量怎么定?', [27.5, 28.0, 28.5], 29.5);
+  updateQueryStage(4, t, 'ABC 分析法如何使用?', [42.0, 42.5, 43.0], 44.0);
+  // 拖动时不立即显示打字机 (避免瞬移), 直接 set text
+  ['q1', 'q2', 'q3'].forEach((k, i) => {
+    const stageNum = i + 2;
+    if (t >= STAGES[stageNum - 1].start + 0.3) {
+      const typing = document.querySelector(`#stage-${stageNum} [data-typing="${k}"]`);
+      const cursor = document.querySelector(`#stage-${stageNum} [data-cursor="${k}"]`);
+      const texts = ['如何处理采购退货?', 'MOQ 政策是什么? 起订量怎么定?', 'ABC 分析法如何使用?'];
+      if (typing && t >= STAGES[stageNum - 1].start + 0.3 + texts[i].length * 0.055) {
+        typing.textContent = texts[i];
+        if (cursor) cursor.style.display = 'none';
+      }
+    }
+  });
+  updateChrome(t);
+});
+
+// ============================================
+// hover 暂停
+// ============================================
+terminalBody.addEventListener('mouseenter', pause);
+terminalBody.addEventListener('mouseleave', play);
+
+// ============================================
+// 按钮
+// ============================================
+btnPause.addEventListener('click', e => {
+  e.stopPropagation();
+  togglePause();
+});
+btnReset.addEventListener('click', e => {
+  e.stopPropagation();
+  reset();
+});
+btnFs.addEventListener('click', e => {
+  e.stopPropagation();
+  if (!document.fullscreenElement) wrapper.requestFullscreen();
+  else document.exitFullscreen();
+});
+
+// ============================================
+// 启动
+// ============================================
+window.addEventListener('load', () => {
+  startTime = performance.now();
+  raf = requestAnimationFrame(tick);
+});
+
+// 防止 hover 触发 page load 时的 mouseleave
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pause();
+});
+</script>
+
+</body>
+</html>
