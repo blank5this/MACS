@@ -98,9 +98,23 @@ class LLMPlannerAgent(ClaudeAgentMixin, PlannerAgent):
         name: str = "planner",
         model: str = "claude-sonnet-4-6",
         provider: Optional[LLMProvider] = None,
+        system_prompt: Optional[str] = None,
         **kwargs: Any,
     ):
-        super().__init__(name=name, model=model, provider=provider, system_prompt=self.SYSTEM_PROMPT, **kwargs)
+        # v1.0.1: accept an explicit ``system_prompt`` override; fall
+        # back to the class-level :data:`SYSTEM_PROMPT` if not given.
+        # Previously the class variable was hard-coded into the
+        # ``super().__init__`` call, which prevented templates (e.g.
+        # :class:`macs_pkg.erp.agents.templates.ERP_PLANNER`) from
+        # injecting their rendered prompts.
+        effective_prompt = system_prompt if system_prompt is not None else self.SYSTEM_PROMPT
+        super().__init__(
+            name=name,
+            model=model,
+            provider=provider,
+            system_prompt=effective_prompt,
+            **kwargs,
+        )
 
     async def _decompose_task(self, task: Any) -> List[Dict[str, Any]]:
         """Use the LLM to decompose the task, or fall back to heuristics."""
@@ -152,9 +166,18 @@ class LLMExecutorAgent(ClaudeAgentMixin, ExecutorAgent):
         model: str = "claude-sonnet-4-6",
         provider: Optional[LLMProvider] = None,
         tool_registry: Optional[Any] = None,  # macs_pkg.tools.ToolRegistry
+        system_prompt: Optional[str] = None,
         **kwargs: Any,
     ):
-        super().__init__(name=name, model=model, provider=provider, system_prompt=self.SYSTEM_PROMPT, **kwargs)
+        # v1.0.1: see LLMPlannerAgent for context.
+        effective_prompt = system_prompt if system_prompt is not None else self.SYSTEM_PROMPT
+        super().__init__(
+            name=name,
+            model=model,
+            provider=provider,
+            system_prompt=effective_prompt,
+            **kwargs,
+        )
         self._tool_registry = tool_registry
 
     async def _execute_subtask(
@@ -229,9 +252,18 @@ class LLMReviewerAgent(ClaudeAgentMixin, ReviewerAgent):
         name: str = "reviewer",
         model: str = "claude-sonnet-4-6",
         provider: Optional[LLMProvider] = None,
+        system_prompt: Optional[str] = None,
         **kwargs: Any,
     ):
-        super().__init__(name=name, model=model, provider=provider, system_prompt=self.SYSTEM_PROMPT, **kwargs)
+        # v1.0.1: see LLMPlannerAgent for context.
+        effective_prompt = system_prompt if system_prompt is not None else self.SYSTEM_PROMPT
+        super().__init__(
+            name=name,
+            model=model,
+            provider=provider,
+            system_prompt=effective_prompt,
+            **kwargs,
+        )
 
     async def _review_result(
         self,

@@ -1,0 +1,205 @@
+name: ERP AI Copilot
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'macs_pkg/erp/**'
+      - 'scripts/seed_erp_db.py'
+      - 'data/erp_kb/**'
+      - 'tests/test_erp_*.py'
+      - 'tests/test_inventory_*.py'
+      - 'tests/test_e2e_*.py'
+      - 'tests/test_nl2sql*.py'
+      - '.github/workflows/erp-copilot.yml'
+      - 'requirements.txt'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'macs_pkg/erp/**'
+      - 'scripts/seed_erp_db.py'
+      - 'data/erp_kb/**'
+      - 'tests/test_erp_*.py'
+      - 'tests/test_inventory_*.py'
+      - 'tests/test_e2e_*.py'
+      - 'tests/test_nl2sql*.py'
+      - '.github/workflows/erp-copilot.yml'
+      - 'requirements.txt'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+  POSTGRES_VERSION: '16-alpine'
+  POSTGRES_DB: erp_copilot
+  POSTGRES_USER: erp
+  POSTGRES_PASSWORD: erp_pass
+
+jobs:
+  # ===========================================================================
+  # 1. Lint the ERP module
+  # ===========================================================================
+  lint:
+    name: Lint ERP module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Run ruff on macs_pkg/erp
+        run: ruff check macs_pkg/erp/
+
+      - name: Run ruff on ERP test files
+        run: ruff check tests/ --select=E,F --ignore=E501
+
+  # ===========================================================================
+  # 2. Unit tests (no DB required)
+  # ===========================================================================
+  test-unit:
+    name: Unit tests (no DB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run unit tests
+        run: |
+          pytest tests/test_erp_web.py \
+                 tests/test_erp_copilot_agent.py \
+                 tests/test_erp_templates.py \
+                 tests/test_erp_rag.py \
+                 tests/test_nl2sql.py \
+                 tests/test_nl2sql_safety.py \
+                 tests/test_inventory_workflow.py \
+                 tests/test_erp_health.py \
+                 -v --tb=short --no-header
+
+  # ===========================================================================
+  # 3. Integration tests (Postgres service container)
+  # ===========================================================================
+  test-integration:
+    name: Integration tests (with Postgres)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:${{ env.POSTGRES_VERSION }}
+        env:
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }}"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${{ env.POSTGRES_DB }}
+      POSTGRES_USER: ${{ env.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+      PYTHONUNBUFFERED: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}; then
+              echo "Postgres is up"
+              break
+            fi
+            echo "Waiting for Postgres... ($i/30)"
+            sleep 2
+          done
+
+      - name: Seed ERP database (small scale for CI speed)
+        run: |
+          python scripts/seed_erp_db.py --scale small
+
+      - name: Run integration tests
+        run: |
+          pytest tests/test_erp_db.py \
+                 tests/test_erp_mcp.py \
+                 tests/test_e2e_workflow.py \
+                 -v --tb=short --no-header
+
+      - name: Health check (CLI)
+        run: |
+          python -c "
+          from macs_pkg.erp.health import check_health_sync
+          r = check_health_sync(ping_db=True)
+          print(r)
+          import sys
+          sys.exit(0 if r.ok else 1)
+          "
+
+  # ===========================================================================
+  # 4. Coverage aggregation
+  # ===========================================================================
+  coverage:
+    name: Coverage report
+    runs-on: ubuntu-latest
+    needs: [lint, test-unit, test-integration]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov coverage
+
+      - name: Generate coverage (non-integration only — fast path)
+        run: |
+          pytest tests/test_erp_*.py tests/test_inventory_workflow.py tests/test_e2e_workflow.py tests/test_nl2sql.py tests/test_nl2sql_safety.py \
+            --cov=macs_pkg/erp \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --no-header -q
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: erp-coverage
+          path: coverage.xml
+          retention-days: 7
