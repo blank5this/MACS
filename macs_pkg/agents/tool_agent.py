@@ -206,7 +206,7 @@ class ToolAgent(BaseAgent):
             # Create result message
             result_msg = Message(
                 sender=self.name,
-                receiver=message.sender,
+                receiver=response.sender,
                 content={
                     "action": "tool_result",
                     "tool": tool_name,

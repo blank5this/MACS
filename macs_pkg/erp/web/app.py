@@ -202,7 +202,7 @@ def _build_default_provider() -> Any:
     # of the providers being absent.
     if os.getenv("MINIMAX_API_KEY"):
         try:
-            from macs_pkg.llm.minimax import MiniMaxProvider
+            from macs_pkg.llm.openai_compatible import MiniMaxProvider
             return MiniMaxProvider()
         except Exception as exc:
             logger.info("MiniMaxProvider unavailable: %s", exc)
@@ -214,8 +214,8 @@ def _build_default_provider() -> Any:
             logger.info("ClaudeProvider unavailable: %s", exc)
     if os.getenv("OPENAI_API_KEY"):
         try:
-            from macs_pkg.llm.openai_provider import OpenAIProvider
-            return OpenAIProvider()
+            from macs_pkg.llm.openai_compatible import OpenAICompatibleProvider
+            return OpenAICompatibleProvider()
         except Exception as exc:
             logger.info("OpenAIProvider unavailable: %s", exc)
     return None
