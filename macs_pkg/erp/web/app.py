@@ -83,6 +83,7 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     erp_module: bool = True
     db_available: bool = False
+    db_backend: Optional[str] = None  # "postgres" | "sqlite" | None
     llm_available: bool = False
     web_static: bool = INDEX_HTML.exists()
 
@@ -114,22 +115,60 @@ class _ResourceCache:
     def get_db_pool(self) -> Any:
         """Return a DatabasePool, or ``None`` if it cannot be built.
 
-        The pool tries to connect on first acquisition. We do not want
-        a missing Postgres to block module import — so we catch all
-        errors and stash the message in ``db_pool_error``.
+        Order of preference:
+        1. **Postgres** — if ``POSTGRES_HOST`` is set, try to actually
+           open the pool (1s timeout). If unreachable, fall through.
+        2. **SQLite fallback** — for the local demo. Activated by either
+           ``MACS_DEMO_SQLITE=1`` (force) or implicitly when Postgres is
+           unreachable, so a fresh laptop without Docker still works.
+
+        The pool's :attr:`backend` attribute is what tells the copilot
+        agent which tool set to register (``"postgres"`` vs ``"sqlite"``).
         """
         if self.db_pool is not None:
             return self.db_pool
         if self.db_pool_error is not None:
             return None
-        try:
-            from macs_pkg.erp.db import DatabaseConfig, DatabasePool
 
-            cfg = DatabaseConfig.from_env()
-            self.db_pool = DatabasePool(cfg)
-        except Exception as exc:  # pragma: no cover — env-dependent
+        force_sqlite = bool(os.getenv("MACS_DEMO_SQLITE"))
+        # 1. Try Postgres first (only if not forced into SQLite mode).
+        if not force_sqlite:
+            try:
+                from macs_pkg.erp.db import DatabaseConfig, DatabasePool
+
+                cfg = DatabaseConfig.from_env()
+                pg_pool = DatabasePool(cfg)
+                # DatabasePool.__init__ is lazy — actually open it now
+                # so a missing Postgres fails fast (1s) instead of waiting
+                # 30s on the first tool call.
+                import asyncio as _asyncio
+                try:
+                    _asyncio.get_event_loop().run_until_complete(
+                        _asyncio.wait_for(pg_pool.open(), timeout=1.0)
+                    )
+                except (OSError, _asyncio.TimeoutError, Exception) as conn_exc:
+                    logger.info(
+                        "Postgres unreachable at %s:%s (%s); using SQLite.",
+                        cfg.host, cfg.port, conn_exc,
+                    )
+                    raise RuntimeError(f"postgres unreachable: {conn_exc}")
+                pg_pool.backend = "postgres"  # type: ignore[attr-defined]
+                self.db_pool = pg_pool
+                return self.db_pool
+            except Exception as exc:  # pragma: no cover — env-dependent
+                # Fall through to SQLite below.
+                logger.info("Postgres pool init failed (%s); falling back to SQLite.", exc)
+        # 2. SQLite fallback
+        try:
+            from macs_pkg.erp.db.sqlite_pool import SQLitePool
+
+            sqlite_path = os.getenv("MACS_SQLITE_PATH") or None
+            self.db_pool = SQLitePool(sqlite_path)
+            self.db_pool.open()
+            return self.db_pool
+        except Exception as exc:  # pragma: no cover
             self.db_pool_error = f"{type(exc).__name__}: {exc}"
-            logger.warning("DB pool init failed: %s", self.db_pool_error)
+            logger.warning("SQLite pool init failed: %s", self.db_pool_error)
             self.db_pool = None
         return self.db_pool
 
@@ -258,9 +297,11 @@ def create_app() -> FastAPI:
         # Map the rich HealthReport onto the lean HTTP response shape.
         # The /healthz endpoint has always been a quick boolean check
         # for k8s probes; we keep that contract.
+        pool = _resources.get_db_pool()
         return HealthResponse(
             status="ok" if report.ok else "degraded",
             db_available=bool(report.db.get("ok")),
+            db_backend=getattr(pool, "backend", None),
             llm_available=bool(report.llm.get("ok")),
         )
 

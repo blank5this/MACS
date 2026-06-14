@@ -271,26 +271,37 @@ class ERPCopilotAgent:
         # ``async def`` explicitly (not lambda) so that
         # :func:`asyncio.iscoroutinefunction` returns True and the
         # ToolAgent dispatcher actually awaits the coroutine.
+        #
+        # Toolset selection: when the pool exposes ``backend == "sqlite"``
+        # we use the SQLite-compatible implementations (see
+        # :mod:`macs_pkg.erp.tools.sqlite_tools`); otherwise we use the
+        # Postgres-flavoured tools. The function signatures are identical
+        # so callers don't notice the swap.
+        if getattr(self.pool, "backend", None) == "sqlite":
+            from ..tools import sqlite_tools as _tools
+        else:
+            from ..tools import inventory_tools as _tools  # type: ignore
+
         async def _t_get_inventory_levels(product_id=None, category=None):
-            return await _tool_get_inventory_levels(
+            return await _tools.get_inventory_levels(
                 self.pool, product_id=product_id, category=category
             )
 
         async def _t_get_low_stock_products(threshold=0):
-            return await _tool_get_low_stock_products(self.pool, threshold=threshold)
+            return await _tools.get_low_stock_products(self.pool, threshold=threshold)
 
         async def _t_get_supplier_price_history(product_id, days=180):
-            return await _tool_get_supplier_price_history(
+            return await _tools.get_supplier_price_history(
                 self.pool, product_id=product_id, days=days
             )
 
         async def _t_get_top_selling_products(start_date=None, end_date=None, limit=10):
-            return await _tool_get_top_selling_products(
+            return await _tools.get_top_selling_products(
                 self.pool, start_date=start_date, end_date=end_date, limit=limit
             )
 
         async def _t_get_sales_velocity(product_id, days=30):
-            return await _tool_get_sales_velocity(
+            return await _tools.get_sales_velocity(
                 self.pool, product_id=product_id, days=days
             )
 
