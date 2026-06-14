@@ -9,7 +9,7 @@
 
 ```
 MACS — Multi-Agent Collaboration Stack | Python · Async · PostgreSQL · FastAPI
-Open-source framework + ERP AI Copilot. 256 tests passing. MIT licensed.
+Open-source framework + ERP AI Copilot. 326 tests passing. MIT licensed.
 github.com/blank5this/MACS
 ```
 
@@ -24,10 +24,10 @@ Open-source MIT-licensed framework for building production multi-agent AI
 systems, with a working ERP AI Copilot application built on top.
 
 Supports 6 LLM providers (Claude, GPT-4o, MiniMax-M2.7, Qwen, DeepSeek,
-Zhipu), 4 collaboration modes (hierarchical, pipeline, decentralized,
-dynamic), and ships with an enterprise-grade Text2SQL + RAG + multi-agent
-workflow. 256 automated tests pass; 8 architecture decision records (ADRs)
-document the design rationale. github.com/blank5this/MACS
+Zhipu), 5 collaboration modes (hierarchical, pipeline, decentralized,
+deep-research, dynamic), and ships with an enterprise-grade Text2SQL +
+RAG + multi-agent workflow. 326 automated tests pass; 8 architecture
+decision records (ADRs) document the design rationale. github.com/blank5this/MACS
 ```
 
 ---
@@ -52,17 +52,17 @@ MACS — Multi-Agent Collaboration Stack  |  github.com/blank5this/MACS
   Rank Fusion (RRF); 90%+ recall on Chinese-language test set,
   <50ms query latency, fully offline-capable.
 
-• Designed 4 collaboration modes (hierarchical / pipeline / decentralized
-  / dynamic) with cooperative scheduling; demonstrated 4-agent
-  inventory-risk workflow producing structured Markdown reports from
-  natural-language questions.
+• Designed 5 collaboration modes (hierarchical / pipeline / decentralized
+  / deep-research / dynamic) with cooperative scheduling; demonstrated
+  4-agent inventory-risk workflow producing structured Markdown reports
+  from natural-language questions.
 
 • Wrote 8 Architecture Decision Records (ADRs) capturing the rationale
   for non-obvious choices (async vs sync, hybrid vs pure retrieval,
   proactive vs reactive RAG, exponential backoff with jitter, etc.) —
   the kind of artifacts that scale engineering beyond one engineer.
 
-• Achieved production-grade reliability: 256 automated tests passing
+• Achieved production-grade reliability: 326 automated tests passing
   in 75 seconds, CI pipeline with 8 jobs, exponential backoff with
   jitter on LLM retries, conversation history capped at 100 messages
   to prevent memory leaks, FastAPI web UI serving 4 endpoints.
@@ -77,7 +77,7 @@ In the last 6 months I built MACS — an open-source multi-agent framework
 shipped with an ERP AI Copilot that turns natural-language questions into
 safe SQL queries, RAG-powered knowledge-base answers, and multi-agent
 inventory reports. The project lives at github.com/blank5this/MACS, has
-256 automated tests, and includes 8 architecture decision records
+326 automated tests, and includes 8 architecture decision records
 documenting tradeoffs I'd love to discuss in an interview.
 
 I work in Python (async, FastAPI, LangChain), PostgreSQL, and have
@@ -114,9 +114,9 @@ KEY TECHNICAL DECISIONS (8 ADRs documented)
 • Conversation history capped at 100 messages (memory leak prevention)
 
 NUMBERS
-• 256 automated tests passing
+• 326 automated tests passing
 • 6 LLM providers supported
-• 4 collaboration modes
+• 5 collaboration modes
 • 18 Chinese policy documents in sample KB
 • <50ms RAG query latency
 • 100% rejection rate on adversarial SQL injection (50+ tests)
@@ -138,7 +138,7 @@ safety guardrail that I wrote unit tests for, and uses hybrid retrieval
 to handle Chinese-language policy documents.
 
 I made 8 architecture decisions and wrote them all down as ADRs — I can
-walk through any of them. The codebase has 256 passing tests and runs
+walk through any of them. The codebase has 326 passing tests and runs
 in production.
 
 I'm looking for an AI Application Engineer role where the team values
@@ -166,7 +166,7 @@ Optimization · SQL Injection Prevention · Read-Only Database User
 
 | Metric | Value | Source |
 |--------|-------|--------|
-| Tests passing | 256 | `python -m pytest tests/ -q` |
+| Tests passing | 326 | `python -m pytest tests/ -q` |
 | Test runtime | ~75 sec | measured |
 | LLM providers | 6 | `macs_pkg/llm/` |
 | Built-in tools | 9 | `macs_pkg/tools/` |

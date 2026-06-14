@@ -27,6 +27,25 @@ Not a tutorial repo. **A shipping, tested, documented AI system.**
 
 > **If you're interviewing me**: pick any ADR. The reasoning matters more than the conclusion.
 
+## 💡 Why MACS
+
+There are many multi-agent frameworks (AutoGen, LangGraph, CrewAI). MACS exists
+because production AI systems need **explicit engineering discipline**, not
+just orchestration.
+
+| Concern | What most demos do | What MACS does |
+|---|---|---|
+| **SQL safety** | "the LLM generated SQL, look!" | 4-layer guardrail (AST whitelist + keyword blacklist + stmt-type check + parameterization) + read-only DB role. 50+ adversarial tests verify no DROP / DELETE / exfiltration can ever execute. ([ADR-003](docs/architecture/ADR-003-sql-safety-guardrail.md)) |
+| **Chinese RAG** | Pure semantic embeddings | Hybrid: char-ngram TF-IDF (no tokenizer needed) + BM25 + RRF. 90%+ recall on Chinese test set, <50ms latency. ([ADR-004](docs/architecture/ADR-004-hybrid-retrieval.md)) |
+| **Reliability** | Hope the LLM behaves | Exponential backoff with ±25% jitter on retries (prevents thundering herd), conversation history capped at 100 messages (memory leak prevention). ([ADR-005](docs/architecture/ADR-005-self-correction-backoff.md), [ADR-006](docs/architecture/ADR-006-conversation-cap.md)) |
+| **Defense in depth** | One safety layer | Application-level guardrail + read-only DB user. Even if the LLM layer fails, the DB rejects writes. ([ADR-007](docs/architecture/ADR-007-readonly-default.md)) |
+| **RAG reliability** | Reactive (LLM decides when to call tool) | Proactive (framework detects domain keywords, injects KB context) — works reliably across all 6 LLM providers, 1 round-trip vs 2. ([ADR-008](docs/architecture/ADR-008-proactive-rag.md)) |
+| **Vendor lock-in** | Hard-coded to one LLM | 6 providers, 1-line swap. Test with mocks, ship with any. ([ADR-002](docs/architecture/ADR-002-llm-provider-abstraction.md)) |
+
+The 8 ADRs are the proof. Read [ADR_INDEX.md](docs/architecture/ADR_INDEX.md) to see the reasoning behind every non-obvious choice.
+
+**The framework + the application together are what I'd discuss in an interview.**
+
 ---
 
 ## ⚡ Try it in 30 seconds — no install
@@ -76,53 +95,45 @@ Two real scenarios run with one command — both work without an API key (determ
 
 ## 🏗️ Architecture
 
+```mermaid
+flowchart TB
+    User([User question])
+
+    subgraph Mode["Collaboration mode (5 to pick)"]
+        H[Hierarchical]
+        P[Pipeline]
+        DC[Decentralized]
+        DR[Deep Research]
+        DY[Dynamic Selector]
+    end
+
+    subgraph Agents["Role agents — all on ReactAgent"]
+        PL[PlannerAgent]
+        EX[ExecutorAgent]
+        RV[ReviewerAgent]
+        TA[ToolAgent]
+    end
+
+    subgraph Caps["Capability layer"]
+        LLM[LLM provider<br/>6 supported]
+        RAG[Hybrid RAG<br/>char-ngram + BM25 + RRF]
+        SQ[Safe SQL<br/>4-layer guardrail]
+        MCP[MCP tools x5]
+    end
+
+    User --> Mode --> Agents --> Caps
+    Caps --> DB[(PostgreSQL RO)]
+    Caps --> KB[(KB chunks)]
+
+    classDef mode fill:#fef3c7,stroke:#d97706
+    classDef agent fill:#dbeafe,stroke:#1d4ed8
+    classDef cap fill:#dcfce7,stroke:#15803d
+    class H,P,DC,DR,DY mode
+    class PL,EX,RV,TA agent
+    class LLM,RAG,SQ,MCP cap
 ```
-                                    ┌─────────────────────┐
-                                    │   User question     │
-                                    └──────────┬──────────┘
-                                               │
-                                               ▼
-                            ┌──────────────────────────────────┐
-                            │  Collaboration mode (5 to pick)  │
-                            │  hierarchical · pipeline ·       │
-                            │  decentralized · deep-research · │
-                            │  dynamic                         │
-                            └──────────────────────────────────┘
-                                               │
-                ┌──────────────────────────────┼──────────────────────────────┐
-                ▼                              ▼                              ▼
-   ┌────────────────────────┐  ┌────────────────────────┐  ┌────────────────────────┐
-   │     PlannerAgent       │  │     ExecutorAgent      │  │     ReviewerAgent      │
-   │                        │  │                        │  │                        │
-   │ ReactAgent lifecycle:  │  │  Proactive RAG inject  │  │  3-criteria scorer:    │
-   │   _think_impl()        │──▶  ↓                     │──▶   completeness         │
-   │   _act_impl()          │  │   LLM call w/ tools    │  │   correctness          │
-   │   strict think→act     │  │   ↓                    │  │   relevance            │
-   │                        │  │   tool dispatch        │  │   + CitationTracker    │
-   └────────────────────────┘  └────────┬───────────────┘  └────────────────────────┘
-                                        │
-                                        ▼
-                            ┌──────────────────────────────────┐
-                            │       ToolAgent + Registry       │
-                            │                                  │
-                            │  MCP tools (5)   RAG (1)         │
-                            │  NL→SQL (1)      Calculator      │
-                            │  WebSearch       FileOps         │
-                            │  PythonExec      Formatter       │
-                            └──────────────────────────────────┘
-                                        │
-                ┌───────────────────────┼───────────────────────┐
-                ▼                       ▼                       ▼
-   ┌────────────────────┐   ┌────────────────────┐   ┌────────────────────┐
-   │  LLM Provider      │   │  Hybrid RAG        │   │  Safe SQL Executor │
-   │  (1-line swap)     │   │                    │   │                    │
-   │  ─────────────     │   │  char-ngram TF-IDF │   │  4 layers:         │
-   │  Claude · GPT-4o   │   │  + BM25            │   │  1) AST whitelist  │
-   │  MiniMax · Qwen      │   │  + RRF fusion      │   │  2) keyword block  │
-   │  DeepSeek · Zhipu  │   │  + Citation graph  │   │  3) stmt-type chk  │
-   │  Hunyuan           │   │                    │   │  4) read-only role │
-   └────────────────────┘   └────────────────────┘   └────────────────────┘
-```
+
+Full diagrams (sequence, state, sub-flows): [docs/architecture/ARCHITECTURE_DIAGRAM.md](docs/architecture/ARCHITECTURE_DIAGRAM.md)
 
 ---
 
