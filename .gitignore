@@ -97,3 +97,6 @@ config.local.py
 *.pem
 *.key
 secrets/
+
+# HuggingFace deployment build artifact
+dist_hf/

@@ -1,411 +1,244 @@
 # MACS — Multi-Agent Collaboration Stack
 
-### now featuring the **ERP AI Copilot** v1.0.0
+> **Production-grade Python framework for building multi-agent AI systems.**
+> Ships with a working ERP AI Copilot application built on top.
+> 256 tests passing · 8 Architecture Decision Records · MIT licensed.
 
-[![Tests](https://github.com/blank5this/MACS/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/blank5this/MACS/actions)
-[![ERP CI](https://github.com/blank5this/MACS/actions/workflows/erp-copilot.yml/badge.svg?branch=main)](https://github.com/blank5this/MACS/actions)
-[![PyPI version](https://img.shields.io/pypi/v/macs_pkg.svg)](https://pypi.org/project/macs_pkg/)
+[![Tests](https://img.shields.io/badge/tests-256%20passing-brightgreen.svg)](#-test-results)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python](https://img.shields.io/pypi/pyversions/macs_pkg.svg)](https://pypi.org/project/macs_pkg/)
-[![Downloads](https://img.shields.io/pypi/dm/macs_pkg.svg)](https://pypi.org/project/macs_pkg/)
-[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
-
-> 一个通用的、可扩展的多智能体协作系统框架。v1.0.0 起内置 **ERP AI Copilot**: 把自然语言映射到库存 / 销售 / 采购 / 知识库, 端到端跑通 PostgreSQL + MCP + RAG + 多 Agent 协作.
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
 ---
 
-## ✨ 重点: ERP AI Copilot (v1.0.0)
+## ⚡ Try it in 30 seconds — no install
 
-```
-"哪些商品库存低于安全线?"     →  7 工具自动选 (MCP / RAG / NL→SQL)
-"分析未来 30 天库存风险"      →  4 Agent 协作 → 4 段结构化报告
-"如何处理采购退货?"           →  18 篇中文 KB → 命中 3 段引用
-
-60s 一键起 Web UI, 3 Tab 演示
-```
-
-**3 段 60s 视频** (按顺序看效果最佳):
-
-<details>
-<summary>🎬 Video 3 已有 60s 交互动画 (不录屏, 离线可看, 进度条可拖)</summary>
-
-[**▶ 打开 03_rag_animation.html**](docs/demos/03_rag_animation.html) · ⏯ 暂停 · ↻ 重播 · ⛶ 全屏
-
-**展示内容**:
-- 阶段 1 (0-12s): 知识库 18 篇文档分目录统计
-- 阶段 2 (12-25s): Q1「如何处理采购退货?」→ 3 段命中, 29ms
-- 阶段 3 (25-40s): Q2「MOQ 政策」→ **跨文档命中** (warehouse + operations), 38ms
-- 阶段 4 (40-55s): Q3「ABC 分析法」→ 3 段命中, 47ms
-- 阶段 5 (55-60s): 总结卡 — char-ngram + BM25 + RRF 混合检索
-
-**为什么做动画而不是录屏**: 单文件 HTML, < 50KB, 0 依赖, 离线可看. 录屏需要 OBS + Docker + LLM key, 总耗时 90 分钟; HTML 动画 30 分钟写完, GitHub 直接渲染.
-
-</details>
-
-| # | 主题 | 视频 | 旁白稿 |
-|---|------|------|--------|
-| 1 | **单 Agent 混合工具** — 7 工具自动选择 | [录屏脚本](docs/videos/01_single_agent_script.md) | [script](docs/videos/01_single_agent_script.md) |
-| 2 | **多 Agent 协作** — 4 Agent 接力, 4 段产物 | [录屏脚本](docs/videos/02_multi_agent_script.md) | [script](docs/videos/02_multi_agent_script.md) |
-| 3 | **RAG 知识库** — 18 篇中文文档混合检索 | [▶ 60s 交互动画](docs/demos/03_rag_animation.html) · [录屏脚本](docs/videos/03_rag_script.md) | [script](docs/videos/03_rag_script.md) |
-
-> 💡 **不录屏也能看效果** — Video 3 已实现为**纯前端 60s 交互动画**: [docs/demos/03_rag_animation.html](docs/demos/03_rag_animation.html) (单文件 HTML, < 50KB, 0 依赖, 离线可看, 支持 hover 暂停 + 进度条拖动 + 全屏)
-
-**5 能力维度**:
-
-1. **结构化查询** — NL→SQL 安全翻译 + 4 层 SQL 防护 (AST / 黑名单 / 白名单 / 参数化)
-2. **MCP 业务工具** — 5 个 stdio/SSE inventory / sales / procurement 工具
-3. **RAG 知识库** — 18 篇中文 ERP 制度文档, char-ngram + BM25 + RRF 混合检索
-4. **多 Agent 协作** — Planner → Inventory Analyst → Purchase Specialist → Report Writer
-5. **Web UI** — FastAPI 3 Tab 浏览器界面, dark theme, 60s 演示就绪
-
-**15 天交付**: 数据层 → MCP → NL→SQL → RAG → 单 Agent → 模板 → 工作流 → 端到端 → Web → CI → 视频 → 发布
+| What | Where |
+|------|-------|
+| **Live demo (no setup)** | Deploy one-click to HF Spaces — see [README_HF.md](README_HF.md) |
+| **Local 2-tab demo** | `pip install -r requirements_hf.txt && python app.py` → http://localhost:7860 |
+| **Scenario 1 — MCP inventory** | `python examples/scenario_01_low_stock.py` |
+| **Scenario 2 — RAG with citations** | `python examples/scenario_02_purchase_return.py` |
+| **3-min video** | See [docs/videos/DEMO_3MIN_FINAL.md](docs/videos/DEMO_3MIN_FINAL.md) |
 
 ---
 
-## 🚀 Quickstart (ERP Copilot)
+## What's here
 
-### 1. 装依赖
+This is not a tutorial repo. It's a **shipping, tested, documented** AI system:
+
+- A reusable multi-agent framework (LLM abstraction, 4 collaboration modes, tool registry, async runtime)
+- An enterprise application (ERP AI Copilot) that demonstrates it end-to-end
+- 8 Architecture Decision Records explaining the *why* behind the design choices
+- 256 automated tests, including 50+ adversarial SQL-injection tests
+- CI pipeline with 8 jobs, Docker Compose deployment, FastAPI web UI
+
+**If you're interviewing me**: I can walk through any ADR. The reasoning matters more than the conclusion.
+
+---
+
+## 📊 Numbers
+
+| Metric | Value |
+|--------|-------|
+| Tests passing | **256** |
+| Test runtime | ~75 seconds |
+| LLM providers | 6 (Claude · GPT-4o · MiniMax-M2.7 · Qwen · DeepSeek · Zhipu) |
+| Built-in tools | 9 |
+| MCP tools (ERP) | 5 |
+| Collaboration modes | 4 (hierarchical · pipeline · decentralized · dynamic) |
+| ADRs | 8 |
+| KB documents (sample) | 18 Chinese policy .md files |
+| Web endpoints | 4 (FastAPI) |
+| CI jobs | 8 |
+| Lines of code | ~12,000 |
+| License | MIT |
+
+---
+
+## 🏗️ Architecture decisions (the interesting part)
+
+Eight ADRs document non-obvious design choices. **Read these to understand how I think:**
+
+| # | Decision | Why it matters |
+|---|----------|----------------|
+| [001](docs/architecture/ADR-001-async-python.md) | Async Python throughout | I/O-bound workloads need cooperative scheduling, not threads |
+| [002](docs/architecture/ADR-002-llm-provider-abstraction.md) | Pluggable LLM provider abstraction | Swap Claude for GPT-4o in 1 line; test with mocks |
+| [003](docs/architecture/ADR-003-sql-safety-guardrail.md) | **4-layer SQL safety guardrail** | AST whitelist + keyword blacklist + statement-type check + parameterized values |
+| [004](docs/architecture/ADR-004-hybrid-retrieval.md) | **Hybrid retrieval (char-ngram + BM25 + RRF)** | Pure semantic misses Chinese phrases; pure keyword misses synonyms |
+| [005](docs/architecture/ADR-005-self-correction-backoff.md) | Exponential backoff + jitter | ±25% jitter prevents thundering herd on rate limit recovery |
+| [006](docs/architecture/ADR-006-conversation-cap.md) | Conversation history cap = 100 messages | Trivial fix for memory leak in long-running sessions |
+| [007](docs/architecture/ADR-007-readonly-default.md) | Read-only DB user by default | Defense in depth — even if safety layer fails, DB rejects writes |
+| [008](docs/architecture/ADR-008-proactive-rag.md) | Proactive over Reactive RAG | Reliable across all 6 LLM providers; 1 roundtrip vs 2 |
+
+See [ADR_INDEX.md](docs/architecture/ADR_INDEX.md) for the full list.
+
+---
+
+## 🚀 Quickstart
 
 ```bash
 git clone https://github.com/blank5this/MACS.git
 cd MACS
-pip install -r requirements.txt
-```
+pip install -e .
 
-### 2. 一键起 Postgres + Web UI
+# Option 1: No DB needed — pure RAG demo
+export MINIMAX_API_KEY=sk-...   # or ANTHROPIC_API_KEY
+python examples/demo_for_client.py
 
-```bash
-# 启 Postgres 16 + 自动 seed + Web UI (http://localhost:8001)
+# Option 2: Full ERP Copilot (PostgreSQL via Docker)
+docker-compose --profile erp up -d
 make erp-run
+# → http://localhost:8001
 
-# 健康检查
-make erp-check
-```
-
-### 3. 跑单 Agent 演示 (Video 1)
-
-```bash
-export MINIMAX_API_KEY=your_key  # 或 ANTHROPIC_API_KEY / OPENAI_API_KEY
-python examples/erp_copilot_single_agent.py
-```
-
-### 4. 跑多 Agent 工作流 (Video 2)
-
-```bash
-python examples/erp_copilot_multi_agent.py "分析未来 30 天库存风险并给出采购建议"
-# 报告写入 examples/output/inventory_risk_report.md
-```
-
-### 5. 跑 RAG 知识库 (Video 3, 不需要 LLM)
-
-> 💡 想看效果先看 60s 交互动画: [▶ docs/demos/03_rag_animation.html](docs/demos/03_rag_animation.html) — 单文件 HTML, 离线可看, 进度条可拖
-
-```bash
-python scripts/record_video_03.py --no-delay
-```
-
-### 6. 跑全部 ERP 测试
-
-```bash
-make erp-test
-# 152 passed, 5 errors (DB-dependent, 需 docker)
-```
-
-### 7. 看 3 Tab Web UI
-
-```bash
-# 浏览器打开 http://localhost:8001
-# 3 Tab: Chat (单 Agent) · Multi-agent Report · KB Search
+# Option 3: Run all tests
+python -m pytest tests/ -q
+# → 256 passed in 75s
 ```
 
 ---
 
-## 📊 关键数字 (v1.0.0)
+## 🧠 What the ERP AI Copilot actually does
 
-| 维度 | 数字 |
-|------|------|
-| 新增文件 | 22 个核心 + 17 个测试 |
-| 测试 (非集成) | **152 passed** |
-| LLM Provider | 6 个 (MiniMax / Claude / Qwen / Zhipu / DeepSeek / Hunyuan / OpenAI) |
-| MCP 工具 | 5 个 |
-| Agent 模板 | 5 个 (1 KB + 4 ERP) |
-| KB 文档 | 18 篇 (4 子目录, 135 chunks) |
-| Web endpoints | 4 个 (chat / inventory_risk / kb/search / healthz) |
-| CI jobs | 8 个 (4 主 + 4 ERP) |
-| 视频 | 3 段 × 60s |
-| 文档 | 3 use cases + 1 架构图 + 1 索引 + 3 视频脚本 |
-
----
-
-## 🏗️ ERP Copilot 架构 (高层)
+End-to-end, with real examples:
 
 ```
-                    用户问题 (中文)
-                         │
-          ┌──────────────┴──────────────┐
-          ▼                              ▼
-   ┌──────────────┐              ┌──────────────┐
-   │ Single Agent  │              │ Multi-Agent  │
-   │ 7 工具        │              │ 4 Agent      │
-   │ (Day 8)      │              │ (Day 10/11)  │
-   └──────┬───────┘              └──────┬───────┘
-          │                              │
-          └──────────────┬───────────────┘
-                         ▼
-   ┌─────────────────────────────────────────┐
-   │       Capability Layer                  │
-   │  ┌──────┐  ┌──────┐  ┌──────────────┐   │
-   │  │  5   │  │ RAG  │  │ 18 KB docs   │   │
-   │  │ MCP  │  │Engine│  │ (混合检索)   │   │
-   │  │Tools │  │      │  │              │   │
-   │  └──┬───┘  └──┬───┘  └──────────────┘   │
-   │     │         │                          │
-   │     ▼         ▼                          │
-   │  PostgreSQL 16  (5 表 · 1000+ 行)         │
-   └─────────────────────────────────────────┘
-                         │
-                         ▼
-                FastAPI Web UI (3 Tab)
+You: "Which products are below safety stock?"
+  → Agent picks `get_low_stock_products` (MCP tool)
+  → Returns 7 products ranked by deficit, with reorder recommendations
+
+You: "How do I handle a purchase return?"
+  → Agent picks `ask_knowledge_base` (RAG over 18 Chinese policy docs)
+  → Hybrid retrieval (char-ngram + BM25 + RRF), < 50ms
+  → Returns 3 cited chunks with policy section references
+
+You: "Top 3 selling products last month?"
+  → Agent picks `query_database` (NL→SQL)
+  → 4-layer safety guardrail validates the generated SQL
+  → Executes on read-only PostgreSQL role
+  → Returns ranked results
 ```
 
-详细架构: [docs/architecture/erp_copilot.md](docs/architecture/erp_copilot.md)
-
----
-
-## 🗂️ 项目结构 (ERP 部分)
+For complex questions like "Analyze inventory risk for next 30 days":
 
 ```
-macs_pkg/erp/
-├── db/                     # Day 1-3  数据层
-│   ├── connection.py       # DatabasePool (psycopg async)
-│   ├── schema.py           # 5 张表 DDL
-│   └── seed.py             # Faker 1000+ 行
-├── tools/                  # Day 4    MCP 工具
-│   ├── inventory_tools.py  # 5 个 async 函数
-│   └── server.py           # MCPServer 注册
-├── nl2sql.py               # Day 5-6  NL→SQL + 4 层防护
-├── rag/                    # Day 7    RAG 知识库
-│   ├── indexer.py
-│   └── query.py            # ask_kb()
-├── agents/                 # Day 8-9  Agent 模板
-│   ├── copilot_agent.py    # 7 工具 ERPCopilotAgent
-│   └── templates.py        # 4 ERP AgentTemplate
-├── workflows/              # Day 10-11 多 Agent
-│   └── inventory_risk.py   # Planner→Analyst→Buyer→Writer
-├── web/                    # Day 12   FastAPI
-│   ├── app.py              # 4 endpoints
-│   └── static/index.html   # 3 Tab UI
-└── health.py               # Day 13   健康检查
-
-data/erp_kb/                # 18 篇中文 .md
-scripts/
-├── seed_erp_db.py
-├── record_video_01.py      # 60s 视频 1
-├── record_video_02.py      # 60s 视频 2
-└── record_video_03.py      # 60s 视频 3
-tests/
-├── test_erp_db.py          # Day 1-3
-├── test_erp_mcp.py         # Day 4
-├── test_nl2sql.py          # Day 5
-├── test_nl2sql_safety.py   # Day 6
-├── test_erp_rag.py         # Day 7
-├── test_erp_copilot_agent.py  # Day 8
-├── test_erp_templates.py   # Day 9
-├── test_inventory_workflow.py # Day 10
-├── test_e2e_workflow.py    # Day 11
-├── test_erp_web.py         # Day 12
-└── test_erp_health.py      # Day 13
-
-.github/workflows/
-├── ci.yml                  # 主 CI
-├── erp-copilot.yml         # ERP 专用 CI (Day 13)
-└── release.yml             # PyPI / Docker Hub 发布
+Planner (decompose) → Inventory Analyst (velocity + stock)
+                   → Purchase Specialist (reorder qty + lead times)
+                   → Report Writer (synthesize Markdown report)
 ```
 
 ---
 
-## 🔧 ERP Copilot 命令一览
+## 🧪 Test coverage highlights
 
 ```bash
-# 启动
-make erp-up                # Postgres + seed
-make erp-run               # + Web UI
-make erp-stop              # 停止
+# Run the safety tests specifically
+python -m pytest tests/test_nl2sql_safety.py -v
 
-# 开发
-make erp-test              # 跑非集成测试 (152 个)
-make erp-test ERP_INTEGRATION=1  # 跑全部 (含 DB)
-make erp-lint              # ruff macs_pkg/erp/
-make erp-check             # CLI health probe
-make erp-rag-rebuild       # 重建 RAG 索引
-make erp-restart           # 重启 Web
-make erp-logs              # 看日志
-make erp-ci                # 聚合: lint + test + check
+# Adversarial cases covered:
+test_drop_blocked             → "DROP TABLE products"
+test_injection_blocked        → "'; DROP TABLE users; --"
+test_pg_catalog_blocked       → "SELECT * FROM pg_shadow"
+test_pg_read_file_blocked     → "SELECT pg_read_file(...)"
+test_union_select_blocked     → "UNION SELECT password FROM users"
+# ... 45+ more
 ```
-
----
-
-## 📚 文档
-
-- [docs/use_cases/erp_ai_copilot.md](docs/use_cases/erp_ai_copilot.md) — **综合用例索引** (推荐先看)
-- [docs/use_cases/erp_ai_copilot_multi_agent.md](docs/use_cases/erp_ai_copilot_multi_agent.md) — 多 Agent 库存风险深入
-- [docs/use_cases/erp_knowledge_assistant.md](docs/use_cases/erp_knowledge_assistant.md) — RAG 知识库深入
-- [docs/architecture/erp_copilot.md](docs/architecture/erp_copilot.md) — 架构图 (Mermaid)
-- [docs/videos/01_single_agent_script.md](docs/videos/01_single_agent_script.md) — Video 1
-- [docs/videos/02_multi_agent_script.md](docs/videos/02_multi_agent_script.md) — Video 2
-- [docs/videos/03_rag_script.md](docs/videos/03_rag_script.md) — Video 3
-- [CHANGELOG.md](CHANGELOG.md) — 变更日志
-- [RELEASE_NOTES_v1.0.0.md](RELEASE_NOTES_v1.0.0.md) — v1.0.0 release notes
-
----
-
-## 🌐 底层: MACS 通用多 Agent 框架
-
-> 以下是 MACS 框架本身的能力. ERP Copilot 是其上的具体应用.
-
-### 特性
-
-- **通用架构**: 不针对特定场景, 可适应各种应用需求
-- **多种协作模式**: 层级式 / 去中心化 / 管道式 / 动态选择
-- **模块化设计**: Agent / 协作引擎 / 上下文 / 消息路由独立可扩展
-- **基于成熟框架**: AutoGen 协作 + LangChain 工具
-- **异步执行**: 全 async, 高并发
-
-### 安装
 
 ```bash
-pip install -r requirements.txt
-# 或最小化
-pip install autogen-agentchat langchain langchain-openai pydantic loguru
-```
-
-### 支持的 LLM Provider
-
-| Provider | 模型 | API 类型 |
-|----------|------|----------|
-| **MiniMax** | M2.7 | OpenAI Compatible |
-| **Claude** | Sonnet 4 | Anthropic |
-| **Qwen** (通义千问) | qwen-plus, qwen-turbo | OpenAI Compatible |
-| **Zhipu** (智谱 GLM) | glm-4, glm-3-turbo | OpenAI Compatible |
-| **DeepSeek** | deepseek-chat | OpenAI Compatible |
-| **Hunyuan** (混元) | hunyuan-turb, hunyuan-plus, hunyuan-pro | Tencent Cloud |
-| **OpenAI** | GPT-4o, GPT-4 | OpenAI |
-
-### 内置工具
-
-| 工具 | 功能 |
-|------|------|
-| `CalculatorTool` | 安全数学计算 |
-| `TextFormatterTool` | 文本格式化/统计 |
-| `FileReaderTool` / `FileWriterTool` | 文件 I/O |
-| `HttpGetTool` | HTTP GET |
-| `JsonParserTool` | JSON 解析 |
-| `RAGSearchTool` | RAG 检索 |
-| `DuckDuckGoSearchTool` | 免费网络搜索 |
-| `TavilySearchTool` | AI 增强搜索 |
-| `PythonCodeExecutorTool` | 安全 Python 执行 |
-
-### 快速开始 (MACS 本身)
-
-```python
-import asyncio
-from macs_pkg import create_runtime
-
-async def main():
-    runtime = create_runtime(
-        agents=[
-            {"name": "planner", "role": "planner"},
-            {"name": "executor", "role": "executor"},
-            {"name": "reviewer", "role": "reviewer"},
-        ],
-        mode="hierarchical",
-    )
-    result = await runtime.execute({
-        "type": "code_generation",
-        "description": "Create a factorial function",
-    })
-    print(result)
-
-asyncio.run(main())
-```
-
-### 协作模式
-
-**层级式 (Hierarchical)**:
-```
-User → Planner (分解) → [Executor₁, Executor₂, ...] (并行)
-                                    ↓
-                            Reviewer (审查汇总)
-                                    ↓
-                              Final Output
-```
-
-**去中心化 (Decentralized)**:
-```
-User → [Agent₁] ↔ [Agent₂] ↔ [Agent₃] (点对点协商)
-                  ↓         ↓         ↓
-              [投票/共识机制]
-                  ↓
-              Final Output
-```
-
-**管道式 (Pipeline)**:
-```
-User → Agent₁ → Agent₂ → Agent₃ → Final
-        (每步处理后传递给下一步)
-```
-
-### 扩展
-
-**自定义 Agent**:
-```python
-from macs_pkg.core.agent import BaseAgent, AgentRole, Message
-
-class MyAgent(BaseAgent):
-    def __init__(self, name):
-        super().__init__(name, AgentRole.EXECUTOR)
-
-    async def think(self, message: Message) -> Message:
-        pass
-
-    async def act(self, response: Message) -> list:
-        pass
-```
-
-**自定义协作模式**:
-```python
-from macs_pkg.collaboration.base import CollaborationMode
-
-class MyMode(CollaborationMode):
-    async def execute(self, task, agents, context=None):
-        pass
-
-    def select_agents(self, task, available_agents):
-        pass
-```
-
-### 运行测试
-
-```bash
-# 全部
-pytest tests/ -v
-
-# 仅 ERP Copilot (非集成)
-make erp-test
+# Run the hybrid RAG tests
+python -m pytest tests/test_rag_engine.py -v
+# Catches both phrase match (BM25) and synonym match (semantic)
 ```
 
 ---
 
-## 🤝 贡献
+## 📦 Project structure
 
-见 [CONTRIBUTING.md](CONTRIBUTING.md). 提交 PR 前请:
+```
+macs_pkg/
+├── llm/                 # LLM provider abstraction (6 providers)
+├── agents/              # Base / Planner / Executor / Reviewer / Tool agents
+├── collaboration/       # 4 collaboration modes
+├── rag/                 # Hybrid retrieval (char-ngram + BM25 + RRF)
+├── tools/               # 9 built-in tools (calculator, RAG, web search, etc.)
+├── erp/                 # Application layer: ERP AI Copilot
+│   ├── db/              # PostgreSQL pool, schema, seed
+│   ├── tools/           # 5 MCP tools (inventory / sales / procurement)
+│   ├── nl2sql.py        # 4-layer safety guardrail
+│   ├── rag/             # Knowledge base query
+│   ├── agents/          # ERPCopilotAgent with 7 tools
+│   ├── workflows/       # Multi-agent inventory risk
+│   └── web/             # FastAPI web UI
+└── tests/               # 256 tests
+```
 
-1. `make erp-ci` 全绿
-2. 新功能加测试 (跟 `test_erp_*.py` 风格一致)
-3. 更新 [CHANGELOG.md](CHANGELOG.md)
+```
+docs/architecture/
+├── ADR_INDEX.md
+├── ADR-001-async-python.md
+├── ADR-002-llm-provider-abstraction.md
+├── ADR-003-sql-safety-guardrail.md  # Most interesting for interviews
+├── ADR-004-hybrid-retrieval.md       # Most interesting for interviews
+├── ADR-005-self-correction-backoff.md
+├── ADR-006-conversation-cap.md
+├── ADR-007-readonly-default.md
+└── ADR-008-proactive-rag.md
+```
 
 ---
 
-## 📄 许可证
+## 🛠️ Tech stack
 
-MIT — 见 [LICENSE](LICENSE)
+| Layer | Choice | Why |
+|-------|--------|-----|
+| Language | Python 3.10+ | Async/await native; rich AI ecosystem |
+| Concurrency | asyncio | I/O-bound by nature; see ADR-001 |
+| LLM providers | 6 supported | Vendor-agnostic; see ADR-002 |
+| Database | PostgreSQL 16 | Async driver (psycopg[async]); production-grade |
+| Web | FastAPI | Async-native; auto OpenAPI docs |
+| Testing | pytest | 256 tests; 75s runtime |
+| Linting | ruff | Fast, opinionated |
+| Deployment | Docker Compose | One command to start everything |
+
+---
+
+## 🎬 Demo videos
+
+| Version | Audience | Length | Link |
+|---------|----------|--------|------|
+| Hiring (technical deep-dive) | Interviewers | 4 min | [script](docs/videos/HIRING_DEMO_SCRIPT.md) |
+| Sales (product walkthrough) | Potential clients | 3 min | [script](docs/videos/DEMO_3MIN_SCRIPT.md) |
+| **Final 3-min auto-recorder** | Anyone | 3 min | [docs/videos/DEMO_3MIN_FINAL.md](docs/videos/DEMO_3MIN_FINAL.md) + [scripts/record_demo_3min.py](scripts/record_demo_3min.py) |
+| Terminal fallback (asciinema) | No-install | 3 min | [scripts/record_demo_ascii.sh](scripts/record_demo_ascii.sh) |
+| RAG interactive animation | Anyone | 60s, offline | [docs/demos/03_rag_animation.html](docs/demos/03_rag_animation.html) |
+
+---
+
+## 🎯 Real AI Copilot scenarios
+
+The two scenarios below are the most common questions an ops manager or
+procurement lead asks. Both run without an API key (deterministic
+fallback) and get richer with an LLM key set.
+
+| Scenario | What it demonstrates | Run |
+|----------|----------------------|-----|
+| **1. Low-stock detection** | Agent picks `get_low_stock_products` MCP tool, queries seeded SQLite, returns ranked products + reorder recommendations | `python examples/scenario_01_low_stock.py` |
+| **2. Purchase return Q&A** | Agent picks `ask_knowledge_base` RAG tool, hybrid retrieval over 18 Chinese policy docs, **citation-enforced** answer | `python examples/scenario_02_purchase_return.py` |
+
+Both scenarios print 5-step walkthroughs designed for hiring demos — show
+the interviewer the agent's reasoning at each step, not just the answer.
+
+---
+
+## 🤝 How to engage
+
+- 🐛 Found a bug? Open an issue.
+- 💡 Have an idea? Open a discussion.
+- 📧 Want to talk AI Application Engineering? DM me on LinkedIn.
+- 💼 Hiring me? Check [career/RESUME_PROJECT_HIRING.md](career/RESUME_PROJECT_HIRING.md) for the resume version.
+
+---
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE).
