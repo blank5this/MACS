@@ -1,17 +1,28 @@
 # Examples — 复制粘贴即可运行
 
-> 5 个 example, 覆盖 MACS 框架 + ERP AI Copilot 全场景.
+> 9 个 example, 覆盖 MACS 框架 + ERP AI Copilot 全场景.
 > 所有命令假设你已经在仓库根目录.
 
 ## 📋 索引
 
+### 4 个「真实 AI Copilot 场景」(无 API key 也能跑)
+
+| # | 文件 | 场景 | 依赖 |
+|---|------|------|------|
+| 1 | [`scenario_01_low_stock.py`](./scenario_01_low_stock.py) | 低库存检测 (MCP 工具路由) | 无 |
+| 2 | [`scenario_02_purchase_return.py`](./scenario_02_purchase_return.py) | 采购退货政策问答 (RAG + 引用强制) | 无 |
+| 3 | [`scenario_03_text2sql.py`](./scenario_03_text2sql.py) | NL→SQL + 4 层 SQL 安全护栏演示 | 无 |
+| 4 | [`scenario_04_supplier_perf.py`](./scenario_04_supplier_perf.py) | 供应商评级 + ASCII 可视化排名 | 无 |
+
+### 5 个框架级 example
+
 | # | 文件 | 场景 | 难度 | 依赖 |
 |---|------|------|------|------|
-| 1 | [`erp_copilot_single_agent.py`](./erp_copilot_single_agent.py) | ERP 单 Agent 混合工具 (Video 1) | ⭐ | LLM key + Postgres |
-| 2 | [`erp_copilot_multi_agent.py`](./erp_copilot_multi_agent.py) | ERP 多 Agent 库存风险 (Video 2) | ⭐⭐ | LLM key + Postgres |
-| 3 | [`erp_knowledge_assistant.py`](./erp_knowledge_assistant.py) | RAG 知识库问答 (Day 7 原始) | ⭐⭐ | LLM key |
-| 4 | [`rag_example.py`](./rag_example.py) | RAG 引擎直接调用 | ⭐ | 无 |
-| 5 | [`interview_qa.py`](./interview_qa.py) | 面试问答 demo | ⭐ | LLM key |
+| 5 | [`erp_copilot_single_agent.py`](./erp_copilot_single_agent.py) | ERP 单 Agent 混合工具 (Video 1) | ⭐ | LLM key + Postgres |
+| 6 | [`erp_copilot_multi_agent.py`](./erp_copilot_multi_agent.py) | ERP 多 Agent 库存风险 (Video 2) | ⭐⭐ | LLM key + Postgres |
+| 7 | [`erp_knowledge_assistant.py`](./erp_knowledge_assistant.py) | RAG 知识库问答 (Day 7 原始) | ⭐⭐ | LLM key |
+| 8 | [`rag_example.py`](./rag_example.py) | RAG 引擎直接调用 | ⭐ | 无 |
+| 9 | [`interview_qa.py`](./interview_qa.py) | 面试问答 demo | ⭐ | LLM key |
 
 ## 🚀 5 分钟 Quickstart
 
