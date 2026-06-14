@@ -100,3 +100,7 @@ secrets/
 
 # HuggingFace deployment build artifact
 dist_hf/
+
+# Resume build artifacts (markdown → HTML → PDF)
+career/_resume_preview.html
+career/_resume_preview.pdf
