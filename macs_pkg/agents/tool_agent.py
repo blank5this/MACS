@@ -1,8 +1,9 @@
 """Tool Agent - executes specific tools and returns results."""
 
+import asyncio
+import inspect
 import json
 from typing import Any, Dict, List, Optional, Callable, TYPE_CHECKING
-import asyncio
 
 from ..core.agent import BaseAgent, AgentRole, Message, AgentState
 from ..core.react_agent import ReactAgent
@@ -243,8 +244,10 @@ class ToolAgent(ReactAgent):
         tool = self._tool_registry[tool_name]
 
         try:
-            # Execute based on whether it's async or sync
-            if asyncio.iscoroutinefunction(tool):
+            # Execute based on whether it's async or sync.
+            # `asyncio.iscoroutinefunction` is deprecated in 3.14 and slated for
+            # removal in 3.16 — prefer the stdlib `inspect` version.
+            if inspect.iscoroutinefunction(tool):
                 result = await tool(**args)
             else:
                 result = tool(**args)

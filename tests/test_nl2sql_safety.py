@@ -197,10 +197,23 @@ async def test_translator_propagates_safe_result():
 
 # ===== SafeSQLExecutor end-to-end =================================
 
+async def _try_open_pool() -> "DatabasePool | None":
+    """Best-effort open. Returns None if PostgreSQL is unreachable so the
+    integration tests auto-skip rather than fail in environments without a DB
+    (CI, dev laptops without docker-compose up, etc.)."""
+    pool = DatabasePool(DatabaseConfig.from_env())
+    try:
+        await asyncio.wait_for(pool.open(), timeout=2.0)
+    except Exception as exc:  # noqa: BLE001 — we want a broad except here
+        return None
+    return pool
+
+
 @pytest.fixture
 async def seeded_pool():
-    pool = DatabasePool(DatabaseConfig.from_env())
-    await pool.open()
+    pool = await _try_open_pool()
+    if pool is None:
+        pytest.skip("PostgreSQL is not reachable — start `docker-compose up -d postgres` to run integration tests")
     await drop_schema(pool)
     await apply_schema(pool)
     await seed_database(pool, scale="small")

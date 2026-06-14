@@ -35,11 +35,22 @@ from psycopg_pool import AsyncConnectionPool
 # psycopg3 async does NOT work with the default ProactorEventLoop on Windows.
 # Force the selector loop policy at import time on Win32. This is a no-op on
 # Linux/macOS. See: https://www.psycopg.org/psycopg3/docs/advanced/async.html
+#
+# `WindowsSelectorEventLoopPolicy` is "slated for removal" in Python 3.16 and
+# already raises DeprecationWarning on 3.14. We suppress the warning here
+# because there is no public, cross-version replacement yet (3.16 introduces
+# `asyncio.loop_factory`-based loop creation, which callers should adopt).
 if sys.platform == "win32":
     try:
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     except AttributeError:  # Python < 3.8 fallback
         pass
+    import warnings
+    warnings.filterwarnings(
+        "ignore",
+        message=r"asyncio\.(set_event_loop_policy|WindowsSelectorEventLoopPolicy).*",
+        category=DeprecationWarning,
+    )
 
 logger = logging.getLogger(__name__)
 
