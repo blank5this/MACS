@@ -1,6 +1,6 @@
 # MACS Makefile - Convenient development commands
 
-.PHONY: help install dev test lint format clean docker-build docker-run erp-seed erp-test erp-run erp-stop erp-check erp-rag-rebuild erp-logs erp-restart
+.PHONY: help install dev test lint format clean docker-build docker-run erp-seed erp-test erp-run erp-stop erp-check erp-rag-rebuild erp-logs erp-restart demo demo-bg demo-stop demo-check demo-open demo-logs
 
 # Default target
 help:
@@ -179,3 +179,66 @@ erp-lint:
 # Aggregate ERP target: seed + lint + test in one shot.
 erp-ci: erp-lint erp-test erp-check
 	@echo "✓ ERP CI pipeline passed"
+
+# =====================================================================
+# Local demo (no Docker, no Postgres — pure local FastAPI)
+# =====================================================================
+# One command to bring up the same UI you'd hit on Render / HF, but
+# on your own laptop. Bind port matches the Gradio app.py (7860) for
+# muscle-memory parity.
+
+DEMO_HOST ?= 127.0.0.1
+DEMO_PORT ?= 7860
+DEMO_PIDFILE ?= .macs-demo.pid
+DEMO_LOGFILE ?= .macs-demo.log
+
+# Run the demo in the foreground. Ctrl+C to stop.
+demo:
+	@if [ -f "$(DEMO_PIDFILE)" ] && kill -0 $$(cat $(DEMO_PIDFILE)) 2>/dev/null; then \
+		echo "[demo] Already running (pid $$(cat $(DEMO_PIDFILE))). Use 'make demo-stop' first."; \
+		exit 1; \
+	fi
+	@DEMO_HOST=$(DEMO_HOST) DEMO_PORT=$(DEMO_PORT) \
+		python -m macs_pkg.erp.web --host $(DEMO_HOST) --port $(DEMO_PORT)
+
+# Run the demo in the background, log to a file, save the pid.
+demo-bg:
+	@if [ -f "$(DEMO_PIDFILE)" ] && kill -0 $$(cat $(DEMO_PIDFILE)) 2>/dev/null; then \
+		echo "[demo] Already running (pid $$(cat $(DEMO_PIDFILE))). Use 'make demo-stop' first."; \
+		exit 1; \
+	fi
+	@echo "[demo] Starting in background -> http://$(DEMO_HOST):$(DEMO_PORT) (log: $(DEMO_LOGFILE))"
+	@DEMO_HOST=$(DEMO_HOST) DEMO_PORT=$(DEMO_PORT) \
+		nohup python -m macs_pkg.erp.web --host $(DEMO_HOST) --port $(DEMO_PORT) \
+		> $(DEMO_LOGFILE) 2>&1 & echo $$! > $(DEMO_PIDFILE)
+	@sleep 1.5
+	@echo "[demo] pid=$$(cat $(DEMO_PIDFILE))  tail logs with: make demo-logs"
+
+# Tail the background demo log.
+demo-logs:
+	@if [ ! -f "$(DEMO_LOGFILE)" ]; then echo "[demo] No log file yet."; exit 1; fi
+	@tail -f $(DEMO_LOGFILE)
+
+# Health-check the demo (probes /healthz).
+demo-check:
+	@curl -sS -o /tmp/macs-demo-health.json -w "[demo] /healthz -> %{http_code} (%{time_total}s)\n" \
+		--max-time 5 http://$(DEMO_HOST):$(DEMO_PORT)/healthz || true
+	@cat /tmp/macs-demo-health.json 2>/dev/null && echo
+
+# Stop the background demo.
+demo-stop:
+	@if [ ! -f "$(DEMO_PIDFILE)" ]; then echo "[demo] Not running."; exit 0; fi
+	@PID=$$(cat $(DEMO_PIDFILE)); \
+	if kill -0 $$PID 2>/dev/null; then \
+		echo "[demo] Stopping pid $$PID..."; \
+		kill $$PID; sleep 1; \
+		kill -0 $$PID 2>/dev/null && kill -9 $$PID 2>/dev/null; \
+	else \
+		echo "[demo] pid $$PID not alive; cleaning pidfile."; \
+	fi
+	@rm -f $(DEMO_PIDFILE)
+
+# Open the demo URL in the default browser.
+demo-open:
+	@python -c "import webbrowser; webbrowser.open('http://$(DEMO_HOST):$(DEMO_PORT)/')"
+
