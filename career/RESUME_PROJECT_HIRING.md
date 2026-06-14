@@ -236,20 +236,24 @@ Recruiters spend 5-15 seconds — make those seconds count.
 
 | Asset | Where | How to share |
 |-------|-------|--------------|
-| **Live web demo** (HF Spaces) | [README_HF.md](../README_HF.md) → one-click deploy | Paste URL in LinkedIn Featured + resume header |
+| **🟢 Live web demo (Render, CN-fast)** | https://macs-erp-copilot.onrender.com | Paste URL in LinkedIn Featured + resume header |
+| **🟢 Live web demo (HF Spaces, global)** | https://huggingface.co/spaces/gkf123/macs-erp-copilot | Backup / international audiences |
 | **Local 2-tab Gradio demo** | `python app.py` | Show during live coding interviews |
 | **Scenario 1 — Low-stock detection** | [examples/scenario_01_low_stock.py](../examples/scenario_01_low_stock.py) | Run in 10 sec; prints 4-step walkthrough |
 | **Scenario 2 — Purchase return RAG** | [examples/scenario_02_purchase_return.py](../examples/scenario_02_purchase_return.py) | Run in 10 sec; citation-enforced |
 | **3-min recorded video** | [docs/videos/DEMO_3MIN_FINAL.md](../docs/videos/DEMO_3MIN_FINAL.md) | One command: `python scripts/record_demo_3min.py` |
 | **Auto-recorder script** | [scripts/record_demo_3min.py](../scripts/record_demo_3min.py) | Playwright + ffmpeg pipeline |
 | **Terminal fallback** | [scripts/record_demo_ascii.sh](../scripts/record_demo_ascii.sh) | Zero-install via asciinema |
+| **One-shot HF push** | [scripts/push_to_hf.ps1](../scripts/push_to_hf.ps1) | Rebuild + push in one command |
 
 ### Resume bullets (drop-in, paste after the existing 6 bullets)
 
 ```
-• Deployed a 2-tab Gradio live demo on Hugging Face Spaces
-  (RAG over 18 Chinese policy docs + Text2SQL on seeded SQLite),
-  enabling interviewer Q&A without local setup — see README_HF.md.
+• Deployed a 2-tab Gradio live demo to both Render.com and Hugging Face
+  Spaces (RAG over 18 Chinese policy docs + Text2SQL on seeded SQLite),
+  enabling interviewer Q&A without local setup — live at
+  https://macs-erp-copilot.onrender.com (CN) and
+  https://huggingface.co/spaces/gkf123/macs-erp-copilot (global).
 
 • Shipped two curated "real AI Copilot scenarios" (low-stock detection
   and citation-enforced policy Q&A) that run in 10 seconds without
@@ -261,6 +265,11 @@ Recruiters spend 5-15 seconds — make those seconds count.
   that drives the FastAPI web UI through 6 scenes in 3 minutes, outputs
   MP4 + GIF, with a zero-install asciinema fallback — docs/videos/
   DEMO_3MIN_FINAL.md.
+
+• Built a one-shot deployment pipeline (scripts/deploy_hf_pack.ps1 +
+  scripts/push_to_hf.ps1) that packages the framework + sample KB
+  into a clean 1.6 MB dist_hf/ directory and pushes it to HF Spaces
+  in a single command, with auto-proxy detection.
 ```
 
 ---

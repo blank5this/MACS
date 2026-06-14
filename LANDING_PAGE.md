@@ -11,9 +11,10 @@
 
 | Way | Effort | What you get |
 |-----|--------|--------------|
-| **[Live demo on HF Spaces](README_HF.md)** | 0 clicks (one URL) | 2-tab Gradio UI: RAG over 18 docs + Text2SQL on seeded SQLite |
-| **Local: `python app.py`** | 30 sec (`pip install -r requirements_hf.txt`) | Same 2-tab UI on http://localhost:7860 |
-| **Two curated scenarios** | 0 install, no API key needed | [scenario_01_low_stock.py](examples/scenario_01_low_stock.py) · [scenario_02_purchase_return.py](examples/scenario_02_purchase_return.py) |
+| **🟢 [Live demo on Render](https://macs-erp-copilot.onrender.com)** (China-friendly) | 0 clicks (one URL) | 2-tab Gradio UI: RAG over 18 docs + Text2SQL on seeded SQLite |
+| **🟢 [Live demo on HF Spaces](https://huggingface.co/spaces/gkf123/macs-erp-copilot)** (global) | 0 clicks (one URL) | Same 2-tab UI, hosted on Hugging Face |
+| Local: `python app.py` | 30 sec (`pip install -r requirements_hf.txt`) | Same 2-tab UI on http://localhost:7860 |
+| Two curated scenarios | 0 install, no API key needed | [scenario_01_low_stock.py](examples/scenario_01_low_stock.py) · [scenario_02_purchase_return.py](examples/scenario_02_purchase_return.py) |
 
 ---
 
