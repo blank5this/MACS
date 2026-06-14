@@ -1,0 +1,15 @@
+# HF Spaces / Streamlit Cloud / Render minimal runtime for the Gradio demo.
+# Keeps the surface small so cold-starts stay under 30s on free tier.
+
+# Core (kept light: only what app.py imports)
+gradio>=4.0,<5.0
+pydantic>=2.0
+loguru>=0.7.0
+python-dotenv>=1.0.0
+
+# LLM providers (MiniMax-M2.7 + Claude both supported)
+openai>=1.0.0
+anthropic>=0.18.0
+
+# MACS itself — installed in editable form so app.py's relative imports work
+# (this file lives in the Space root, which already contains macs_pkg/)
