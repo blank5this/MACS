@@ -5,6 +5,8 @@ import json
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from ..core.agent import BaseAgent, AgentRole, Message, AgentState
+from ..core.react_agent import ReactAgent
+from ..core.utils import extract_json
 
 try:
     from loguru import logger
@@ -34,7 +36,7 @@ When executing:
 Be thorough but efficient. Report both success and any issues encountered."""
 
 
-class ExecutorAgent(BaseAgent):
+class ExecutorAgent(ReactAgent):
     """Executor Agent for running subtasks.
 
     Responsibilities:
@@ -42,6 +44,9 @@ class ExecutorAgent(BaseAgent):
     - Execute subtasks using available tools and LLM
     - Report results back
     - Handle errors and retries
+
+    Inherits from :class:`ReactAgent` — call ``think()`` before ``act()``,
+    or use ``run()`` for the combined cycle.
     """
 
     def __init__(
@@ -83,7 +88,7 @@ class ExecutorAgent(BaseAgent):
         """
         self._tools[name] = tool
 
-    async def think(self, message: Message) -> Message:
+    async def _think_impl(self, message: Message) -> Message:
         """Process subtask and prepare for execution.
 
         Args:
@@ -92,7 +97,6 @@ class ExecutorAgent(BaseAgent):
         Returns:
             Response with execution plan.
         """
-        self.state = AgentState.THINKING
         content = message.content
 
         action = content.get("action", "execute") if isinstance(content, dict) else "execute"
@@ -136,7 +140,7 @@ class ExecutorAgent(BaseAgent):
                 "error": f"Unknown action: {action}",
             }
 
-        response = Message(
+        return Message(
             sender=self.name,
             receiver=message.sender,
             content=response_content,
@@ -147,10 +151,7 @@ class ExecutorAgent(BaseAgent):
             },
         )
 
-        self.state = AgentState.IDLE
-        return response
-
-    async def act(self, response: Message) -> List[Message]:
+    async def _act_impl(self, response: Message) -> List[Message]:
         """Execute the subtask and report results.
 
         Args:
@@ -159,7 +160,6 @@ class ExecutorAgent(BaseAgent):
         Returns:
             List of messages (result to sender).
         """
-        self.state = AgentState.ACTING
         outgoing = []
 
         content = response.content
@@ -212,7 +212,6 @@ class ExecutorAgent(BaseAgent):
                 )
 
         self.add_to_memory(response)
-        self.state = AgentState.IDLE
         return outgoing
 
     def _create_execution_plan(self, subtask: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -326,28 +325,13 @@ Only respond with JSON."""
                 temperature=0.5,
             )
 
-            # Parse JSON response
             result_text = response.content.strip() if response.content else ""
-
             if not result_text:
                 raise ValueError("LLM returned empty response")
 
-            # Try to extract JSON from markdown code blocks if present
-            json_match = None
-            if "```json" in result_text:
-                start = result_text.find("```json") + 7
-                end = result_text.find("```", start)
-                json_match = result_text[start:end].strip()
-            elif "```" in result_text:
-                start = result_text.find("```") + 3
-                end = result_text.find("```", start)
-                json_match = result_text[start:end].strip()
-            elif result_text.startswith("{"):
-                json_match = result_text
-
-            if json_match:
-                result = json.loads(json_match)
-                return result
+            parsed = extract_json(result_text)
+            if isinstance(parsed, dict):
+                return parsed
 
             # Response is not valid JSON, treat as text output
             return {
@@ -358,7 +342,7 @@ Only respond with JSON."""
                 "validation": "Output from LLM (non-JSON response)",
             }
 
-        except (json.JSONDecodeError, ValueError, Exception) as e:
+        except Exception as e:
             logger.warning(f"LLM execution failed: {e}, using simple fallback")
             return await self._execute_subtask_simple(subtask, execution_plan)
 

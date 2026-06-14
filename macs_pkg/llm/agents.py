@@ -58,8 +58,8 @@ def _parse_json_content(content: str) -> Dict[str, Any]:
             if start != -1 and end > start:
                 partial = content[start:end]
                 return json.loads(partial)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to extract partial JSON from response: {e}")
 
     # Not valid JSON - return as plain text in final_output
     logger.debug(f"Response is not JSON, treating as plain text")
@@ -371,8 +371,8 @@ class MiniMaxExecutorAgent(MiniMaxAgentMixin, ExecutorAgent):
                         rag_result = await rag_tool.execute(query=task_text)
                         if rag_result.success:
                             rag_context = f"\n\n[RAG检索结果]\n{rag_result.output}\n\n"
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Proactive RAG retrieval failed: {e}")
 
         prompt_base = f"Execute:\n\n{task_text}"
         if rag_context:

@@ -4,7 +4,9 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import asyncio
 import json
 
-from ..core.agent import BaseAgent, AgentRole, Message, AgentState
+from ..core.agent import AgentRole, Message, AgentState
+from ..core.react_agent import ReactAgent
+from ..core.utils import extract_json
 
 try:
     from loguru import logger
@@ -34,7 +36,7 @@ When decomposing a task:
 Respond in JSON format with your decomposition."""
 
 
-class PlannerAgent(BaseAgent):
+class PlannerAgent(ReactAgent):
     """Planner Agent for task decomposition and planning.
 
     Responsibilities:
@@ -43,6 +45,11 @@ class PlannerAgent(BaseAgent):
     - Determine task dependencies
     - Create execution plans
     - Assign subtasks to appropriate agents
+
+    Inherits from :class:`ReactAgent`, which enforces the think→act
+    lifecycle. Use ``agent.run(msg)`` for the combined cycle, or call
+    ``think()`` and ``act()`` in order — calling ``act()`` first will
+    raise ``RuntimeError``.
     """
 
     def __init__(
@@ -73,7 +80,7 @@ class PlannerAgent(BaseAgent):
         self._provider = provider
         self._enable_llm = True
 
-    async def think(self, message: Message) -> Message:
+    async def _think_impl(self, message: Message) -> Message:
         """Process task and create decomposition plan.
 
         Args:
@@ -82,7 +89,6 @@ class PlannerAgent(BaseAgent):
         Returns:
             Response message containing subtask decomposition.
         """
-        self.state = AgentState.THINKING
         content = message.content
 
         # Extract task information
@@ -127,7 +133,7 @@ class PlannerAgent(BaseAgent):
                 "error": f"Unknown action: {action}",
             }
 
-        response = Message(
+        return Message(
             sender=self.name,
             receiver=message.sender,
             content=response_content,
@@ -138,10 +144,7 @@ class PlannerAgent(BaseAgent):
             },
         )
 
-        self.state = AgentState.IDLE
-        return response
-
-    async def act(self, response: Message) -> List[Message]:
+    async def _act_impl(self, response: Message) -> List[Message]:
         """Send subtasks to assigned executors.
 
         Args:
@@ -150,7 +153,6 @@ class PlannerAgent(BaseAgent):
         Returns:
             List of messages to send to executors.
         """
-        self.state = AgentState.ACTING
         outgoing = []
 
         content = response.content
@@ -180,7 +182,6 @@ class PlannerAgent(BaseAgent):
                 outgoing.append(task_msg)
 
         self.add_to_memory(response)
-        self.state = AgentState.IDLE
         return outgoing
 
     async def _decompose_task_with_llm(self, task: Any) -> List[Dict[str, Any]]:
@@ -235,19 +236,10 @@ Only respond with JSON, no other text."""
                 temperature=0.5,
             )
 
-            # Parse JSON response
-            subtasks_text = response.content.strip()
-            # Try to extract JSON from markdown code blocks if present
-            if "```json" in subtasks_text:
-                start = subtasks_text.find("```json") + 7
-                end = subtasks_text.find("```", start)
-                subtasks_text = subtasks_text[start:end]
-            elif "```" in subtasks_text:
-                start = subtasks_text.find("```") + 3
-                end = subtasks_text.find("```", start)
-                subtasks_text = subtasks_text[start:end]
-
-            subtasks = json.loads(subtasks_text)
+            subtasks = extract_json(response.content)
+            if not isinstance(subtasks, list):
+                logger.warning("LLM decomposition returned non-list JSON, using simple fallback")
+                return self._decompose_task_simple(task)
 
             # Validate and normalize subtasks
             validated_subtasks = []
@@ -265,8 +257,8 @@ Only respond with JSON, no other text."""
             if validated_subtasks:
                 return validated_subtasks
 
-        except (json.JSONDecodeError, Exception) as e:
-            # LLM failed, fallback to simple decomposition
+        except Exception as e:
+            # LLM call itself failed (network/timeout/etc.), fallback to simple decomposition
             logger.warning(f"LLM decomposition failed: {e}, using simple fallback")
 
         return self._decompose_task_simple(task)
@@ -418,20 +410,11 @@ Only respond with JSON."""
                 max_tokens=2048,
                 temperature=0.7,
             )
-            result_text = response.content.strip()
-            if "```json" in result_text:
-                start = result_text.find("```json") + 7
-                end = result_text.find("```", start)
-                result_text = result_text[start:end].strip()
-            elif "```" in result_text:
-                start = result_text.find("```") + 3
-                end = result_text.find("```", start)
-                result_text = result_text[start:end].strip()
-            if result_text.startswith("{"):
-                import json
-                return json.loads(result_text)
-        except Exception:
-            pass
+            parsed = extract_json(response.content)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception as e:
+            logger.warning(f"LLM proposal generation failed: {e}, using simple fallback")
         return self._generate_proposal_simple(task)
 
     def _generate_proposal_simple(self, task: Any) -> Dict[str, Any]:

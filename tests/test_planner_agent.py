@@ -57,7 +57,16 @@ async def test_planner_act_sends_messages():
     planner = PlannerAgent(name="test_planner")
 
     from macs_pkg.core.agent import Message
-    # Create a response that would come from think()
+    # First trigger think() so the ReactAgent lifecycle accepts act()
+    trigger = Message(
+        sender="test",
+        receiver="test_planner",
+        content={"action": "decompose", "task": "demo task"},
+        msg_type="task",
+    )
+    await planner.think(trigger)
+
+    # Now feed the synthetic response we want to test act() against
     response = Message(
         sender="test_planner",
         receiver="test",

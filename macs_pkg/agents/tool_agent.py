@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional, Callable, TYPE_CHECKING
 import asyncio
 
 from ..core.agent import BaseAgent, AgentRole, Message, AgentState
+from ..core.react_agent import ReactAgent
+from ..core.utils import extract_json
 
 try:
     from loguru import logger
@@ -16,7 +18,7 @@ if TYPE_CHECKING:
     from ..llm.base import LLMProvider
 
 
-class ToolAgent(BaseAgent):
+class ToolAgent(ReactAgent):
     """Tool Agent for executing specific tools and utilities.
 
     Responsibilities:
@@ -24,6 +26,9 @@ class ToolAgent(BaseAgent):
     - Return structured results
     - Handle tool errors gracefully
     - Provide tool metadata
+
+    Inherits from :class:`ReactAgent` — call ``think()`` before ``act()``,
+    or use ``run()`` for the combined cycle.
     """
 
     def __init__(
@@ -81,7 +86,7 @@ class ToolAgent(BaseAgent):
         """List all registered tool names."""
         return list(self._tool_registry.keys())
 
-    async def think(self, message: Message) -> Message:
+    async def _think_impl(self, message: Message) -> Message:
         """Process tool request and prepare for execution.
 
         Args:
@@ -90,7 +95,6 @@ class ToolAgent(BaseAgent):
         Returns:
             Response with execution plan.
         """
-        self.state = AgentState.THINKING
         content = message.content
 
         action = content.get("action", "execute_tool") if isinstance(content, dict) else "execute_tool"
@@ -161,7 +165,7 @@ class ToolAgent(BaseAgent):
                 "error": f"Unknown action: {action}",
             }
 
-        response = Message(
+        return Message(
             sender=self.name,
             receiver=message.sender,
             content=response_content,
@@ -172,10 +176,7 @@ class ToolAgent(BaseAgent):
             },
         )
 
-        self.state = AgentState.IDLE
-        return response
-
-    async def act(self, response: Message) -> List[Message]:
+    async def _act_impl(self, response: Message) -> List[Message]:
         """Execute tools and return results.
 
         Args:
@@ -184,7 +185,6 @@ class ToolAgent(BaseAgent):
         Returns:
             List of messages (execution results).
         """
-        self.state = AgentState.ACTING
         outgoing = []
 
         content = response.content
@@ -221,7 +221,6 @@ class ToolAgent(BaseAgent):
             outgoing.append(result_msg)
 
         self.add_to_memory(response)
-        self.state = AgentState.IDLE
         return outgoing
 
     async def _execute_tool(
@@ -350,19 +349,9 @@ Only respond with JSON."""
                 temperature=0.3,
             )
 
-            result_text = response.content.strip()
-            if "```json" in result_text:
-                start = result_text.find("```json") + 7
-                end = result_text.find("```", start)
-                result_text = result_text[start:end].strip()
-            elif "```" in result_text:
-                start = result_text.find("```") + 3
-                end = result_text.find("```", start)
-                result_text = result_text[start:end].strip()
-
-            if result_text.startswith("{"):
-                result = json.loads(result_text)
-                return result.get("selected_tool", "unknown"), result.get("arguments", {})
+            parsed = extract_json(response.content)
+            if isinstance(parsed, dict):
+                return parsed.get("selected_tool", "unknown"), parsed.get("arguments", {})
 
         except Exception as e:
             logger.warning(f"LLM tool selection failed: {e}")
@@ -450,10 +439,36 @@ def create_tool_agent_with_defaults(
             return {"query": query, "results": [], "message": "Search not implemented"}
 
         async def calculator(expression: str) -> Dict[str, Any]:
-            """Evaluate a mathematical expression."""
+            """Evaluate a mathematical expression safely.
+
+            Only number literals and arithmetic operators (+ - * / // % **)
+            with unary +/- are allowed. No names, calls, or attributes —
+            ``eval`` is never invoked.
+            """
+            import ast
+            import operator as op
+
+            _BIN_OPS = {
+                ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul,
+                ast.Div: op.truediv, ast.FloorDiv: op.floordiv,
+                ast.Mod: op.mod, ast.Pow: op.pow,
+            }
+            _UNARY_OPS = {ast.UAdd: op.pos, ast.USub: op.neg}
+
+            def _eval(node: ast.AST) -> Any:
+                if isinstance(node, ast.Expression):
+                    return _eval(node.body)
+                if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                    return node.value
+                if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
+                    return _BIN_OPS[type(node.op)](_eval(node.left), _eval(node.right))
+                if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
+                    return _UNARY_OPS[type(node.op)](_eval(node.operand))
+                raise ValueError(f"Unsupported expression element: {ast.dump(node)}")
+
             try:
-                # WARNING: eval can be dangerous, use safe_eval in production
-                result = eval(expression, {"__builtins__": {}}, {})  # Safe eval
+                tree = ast.parse(expression, mode="eval")
+                result = _eval(tree)
                 return {"expression": expression, "result": result}
             except Exception as e:
                 return {"expression": expression, "error": str(e)}

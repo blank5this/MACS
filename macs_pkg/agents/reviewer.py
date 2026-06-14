@@ -5,6 +5,8 @@ import asyncio
 
 from ..core.agent import BaseAgent, AgentRole, Message, AgentState
 from ..core.citation import CitationTracker
+from ..core.react_agent import ReactAgent
+from ..core.utils import extract_json
 
 try:
     from loguru import logger
@@ -34,7 +36,7 @@ When reviewing:
 Respond in JSON format for machine-readable reviews."""
 
 
-class ReviewerAgent(BaseAgent):
+class ReviewerAgent(ReactAgent):
     """Reviewer Agent for validating and quality-checking results.
 
     Responsibilities:
@@ -43,6 +45,9 @@ class ReviewerAgent(BaseAgent):
     - Provide feedback for improvements
     - Approve or reject results
     - Aggregate multiple results
+
+    Inherits from :class:`ReactAgent` — call ``think()`` before ``act()``,
+    or use ``run()`` for the combined cycle.
     """
 
     def __init__(
@@ -89,7 +94,7 @@ class ReviewerAgent(BaseAgent):
         """
         self._criteria = criteria
 
-    async def think(self, message: Message) -> Message:
+    async def _think_impl(self, message: Message) -> Message:
         """Process review request and prepare review.
 
         Args:
@@ -98,7 +103,6 @@ class ReviewerAgent(BaseAgent):
         Returns:
             Response with review plan.
         """
-        self.state = AgentState.THINKING
         content = message.content
 
         action = content.get("action", "review") if isinstance(content, dict) else "review"
@@ -138,7 +142,7 @@ class ReviewerAgent(BaseAgent):
                 "error": f"Unknown action: {action}",
             }
 
-        response = Message(
+        return Message(
             sender=self.name,
             receiver=message.sender,
             content=response_content,
@@ -149,10 +153,7 @@ class ReviewerAgent(BaseAgent):
             },
         )
 
-        self.state = AgentState.IDLE
-        return response
-
-    async def act(self, response: Message) -> List[Message]:
+    async def _act_impl(self, response: Message) -> List[Message]:
         """Execute review and send results.
 
         Args:
@@ -161,7 +162,6 @@ class ReviewerAgent(BaseAgent):
         Returns:
             List of messages (review results).
         """
-        self.state = AgentState.ACTING
         outgoing = []
 
         content = response.content
@@ -224,7 +224,6 @@ class ReviewerAgent(BaseAgent):
                 )
 
         self.add_to_memory(response)
-        self.state = AgentState.IDLE
         return outgoing
 
     def _create_review_plan(self, results: List[Any]) -> List[Dict[str, Any]]:
@@ -301,30 +300,22 @@ Only respond with JSON."""
                 temperature=0.3,
             )
 
-            review_text = response.content.strip()
+            reviews = extract_json(response.content)
+            if isinstance(reviews, list):
+                return reviews
 
-            # Try to extract JSON from markdown code blocks if present
-            if "```json" in review_text:
-                start = review_text.find("```json") + 7
-                end = review_text.find("```", start)
-                review_text = review_text[start:end]
-            elif "```" in review_text:
-                start = review_text.find("```") + 3
-                end = review_text.find("```", start)
-                review_text = review_text[start:end]
+            logger.warning("LLM review did not return a list, using simple fallback")
 
-            reviews = json.loads(review_text)
-            return reviews
-
-        except (json.JSONDecodeError, Exception) as e:
+        except Exception as e:
             logger.warning(f"LLM review failed: {e}, using simple fallback")
-            # Fallback to simple reviews
-            review_plan = self._create_review_plan(results)
-            reviews = []
-            for result_item in results:
-                review = await self._review_result_simple(result_item, review_plan)
-                reviews.append(review)
-            return reviews
+
+        # Fallback to simple reviews
+        review_plan = self._create_review_plan(results)
+        fallback_reviews = []
+        for result_item in results:
+            review = await self._review_result_simple(result_item, review_plan)
+            fallback_reviews.append(review)
+        return fallback_reviews
 
     async def _review_result_simple(
         self,
@@ -420,21 +411,13 @@ Only respond with JSON."""
                 max_tokens=1024,
                 temperature=0.3,
             )
+            parsed = extract_json(response.content)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception as e:
+            logger.warning(f"LLM single-result review failed: {e}, using simple fallback")
 
-            review_text = response.content.strip()
-            if "```json" in review_text:
-                start = review_text.find("```json") + 7
-                end = review_text.find("```", start)
-                review_text = review_text[start:end]
-            elif "```" in review_text:
-                start = review_text.find("```") + 3
-                end = review_text.find("```", start)
-                review_text = review_text[start:end]
-
-            return json.loads(review_text)
-
-        except (json.JSONDecodeError, Exception):
-            return await self._review_result_simple(result, self._create_review_plan([result]))
+        return await self._review_result_simple(result, self._create_review_plan([result]))
 
     def _score_completeness(self, result: Any) -> float:
         """Score completeness of a result."""
@@ -694,19 +677,12 @@ Only respond with JSON."""
                 temperature=0.3,
             )
 
-            report_text = response.content.strip()
-            if "```json" in report_text:
-                start = report_text.find("```json") + 7
-                end = report_text.find("```", start)
-                report_text = report_text[start:end]
-            elif "```" in report_text:
-                start = report_text.find("```") + 3
-                end = report_text.find("```", start)
-                report_text = report_text[start:end]
-
-            parsed = json.loads(report_text)
-            report_body = parsed.get("report", report_text)
-        except (json.JSONDecodeError, Exception) as e:
+            parsed = extract_json(response.content)
+            if isinstance(parsed, dict) and "report" in parsed:
+                report_body = parsed["report"]
+            else:
+                report_body = (response.content or "").strip()
+        except Exception as e:
             logger.warning(f"LLM synthesis failed: {e}, using simple fallback")
             report_body = self._plaintext_synthesis(sections)
 
