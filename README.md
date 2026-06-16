@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-[**🟢 Live demo**](https://macs-erp-copilot.onrender.com) · [**📐 Architecture**](#%EF%B8%8F-architecture) · [**📚 ADRs**](docs/architecture/ADR_INDEX.md) · [**▶ Quickstart**](#-quickstart) · [**💼 Hire me**](career/RESUME_PROJECT_HIRING.md)
+[**🟢 Live demo**](https://macs-erp-copilot.onrender.com) · [**📐 Architecture**](#%EF%B8%8F-architecture) · [**📚 ADRs**](docs/architecture/ADR_INDEX.md) · [**▶ Quickstart**](#-quickstart) · [**🛠️ 本地启动**](STARTUP.md) · [**💼 Hire me**](career/RESUME_PROJECT_HIRING.md)
 
 </div>
 

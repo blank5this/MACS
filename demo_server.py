@@ -183,7 +183,7 @@ _rag_engine: Optional[RAGEngine] = None
 _provider: Optional[MiniMaxProvider] = None
 
 
-def _build_runtime() -> RuntimeEngine:
+async def _build_runtime() -> RuntimeEngine:
     global _runtime, _rag_engine, _provider
 
     if _runtime is not None:
@@ -227,10 +227,10 @@ def _build_runtime() -> RuntimeEngine:
         },
     ]
 
-    asyncio.run(_rag_engine.add_documents(
+    await _rag_engine.add_documents(
         [doc["content"] for doc in DEMO_KNOWLEDGE],
         [doc["metadata"] for doc in DEMO_KNOWLEDGE],
-    ))
+    )
 
     if API_KEY:
         _provider = MiniMaxProvider(api_key=API_KEY, model="MiniMax-M2.7")
@@ -326,7 +326,7 @@ async def execute(
     start = time.time()
 
     try:
-        runtime = _build_runtime()
+        runtime = await _build_runtime()
 
         # Get session context (for conversation continuity)
         session_context = ""
