@@ -1,5 +1,8 @@
 # Resume Project Description — English Versions
 
+> 项目业务名：**ERP AI Copilot**——基于自研 MACS 多 Agent 框架的企业智能助手。
+> 技术栈：Python · Async · PostgreSQL · FastAPI · MCP · RAG。
+
 > Copy-paste directly into your resume, LinkedIn "Projects", or cover letter.
 > Designed for overseas mid-to-large company AI Application Engineer roles.
 

@@ -26,6 +26,19 @@ test:
 test-cov:
 	pytest tests/ -v --cov=macs_pkg --cov-report=html --cov-report=term
 
+# Benchmark targets (Track 3)
+# CI 友好：无 LLM key 时只跑 SQL injection + RAG recall；workflow/latency 自动 skip
+test-benchmark:
+	pytest tests/benchmark/ -v --tb=short -m "not requires_llm"
+
+# 真实接 LLM：需要 .env 里有 ANTHROPIC_API_KEY 或 MINIMAX_API_KEY 等
+test-benchmark-real:
+	pytest tests/benchmark/ -v --tb=short
+
+# 生成 RAG 评测题候选（30 题候选 → 用户筛 → 改名为 rag_ground_truth.jsonl）
+gen-benchmark-questions:
+	python tests/benchmark/generate_rag_questions.py
+
 # Lint code
 lint:
 	black --check macs_pkg/ tests/

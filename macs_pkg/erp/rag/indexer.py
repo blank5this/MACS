@@ -174,6 +174,10 @@ def load_kb_chunks(kb_dir: Optional[Path] = None) -> list[dict[str, Any]]:
         try:
             text = md_file.read_text(encoding="utf-8")
         except UnicodeDecodeError:
+            # 不是 UTF-8 才回退到 GBK；明确告警，避免污染向量库却悄无声息
+            logger.warning(
+                "KB 文件 %s 非 UTF-8，回退到 GBK（errors=replace，可能丢字节）", rel
+            )
             text = md_file.read_text(encoding="gbk", errors="replace")
         file_chunks = chunk_markdown(text, str(md_file))
         for c in file_chunks:

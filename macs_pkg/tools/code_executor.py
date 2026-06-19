@@ -187,12 +187,42 @@ print(err)
             start = time.time()
             timeout_val = timeout or self._timeout
 
-            process = await asyncio.create_subprocess_exec(
-                sys.executable,
-                str(tmp_file),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            # Windows 上 asyncio.create_subprocess_exec + PIPE 必须在 ProactorEventLoop 里跑；
+            # pytest-asyncio 复用 session 级 loop 时可能拿到 SelectorEventLoop，会抛
+            # NotImplementedError。fallback 到 sync subprocess.run 永远 work。
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    sys.executable,
+                    str(tmp_file),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+            except NotImplementedError:
+                # Sync fallback：不开 PIPE，用 capture_output
+                try:
+                    completed = subprocess.run(
+                        [sys.executable, str(tmp_file)],
+                        capture_output=True,
+                        text=False,
+                        timeout=timeout_val,
+                    )
+                except subprocess.TimeoutExpired:
+                    return ToolResult(
+                        success=False,
+                        output=None,
+                        error=f"Execution timeout after {timeout_val}s",
+                    )
+                stdout = completed.stdout or b""
+                stderr = completed.stderr or b""
+                duration = (time.time() - start) * 1000
+                output = stdout.decode("utf-8", errors="replace")
+                return self._parse_subprocess_output(
+                    output=output,
+                    stderr_text=stderr.decode("utf-8", errors="replace"),
+                    return_code=completed.returncode,
+                    duration=duration,
+                    exec_id=exec_id,
+                )
 
             try:
                 stdout, stderr = await asyncio.wait_for(
@@ -209,45 +239,73 @@ print(err)
 
             duration = (time.time() - start) * 1000
             output = stdout.decode("utf-8", errors="replace")
-
-            # 解析输出
-            if "__MACS_OUTPUT_START__" in output:
-                parts = output.split("__MACS_OUTPUT_START__")
-                user_output = parts[1].split("__MACS_ERROR_START__")[0].strip()
-                error_output = parts[1].split("__MACS_ERROR_START__")[1].strip() if "__MACS_ERROR_START__" in parts[1] else ""
-            else:
-                user_output = output
-                error_output = stderr.decode("utf-8", errors="replace")
-
-            # 截断过长输出
-            if len(user_output) > self._max_output_size:
-                user_output = user_output[:self._max_output_size] + f"\n... (truncated, total {len(user_output)} chars)"
-            if len(error_output) > self._max_output_size:
-                error_output = error_output[:self._max_output_size] + f"\n... (truncated)"
-
-            success = process.returncode == 0 and not error_output.strip()
-
-            return ToolResult(
-                success=success,
-                output=user_output if success else None,
-                error=error_output.strip() if error_output.strip() else None,
-                metadata={
-                    "return_code": process.returncode,
-                    "duration_ms": round(duration, 2),
-                    "exec_id": exec_id,
-                },
+            return self._parse_subprocess_output(
+                output=output,
+                stderr_text=stderr.decode("utf-8", errors="replace"),
+                return_code=process.returncode,
+                duration=duration,
+                exec_id=exec_id,
             )
 
         except Exception as e:
+            # Windows + asyncio + subprocess 的 edge case：某些异常 str() 为空。
+            # 用 repr() 兜底，至少能看到异常类型和参数。
+            err_msg = str(e) or repr(e) or f"{type(e).__name__}()"
             return ToolResult(
                 success=False,
                 output=None,
-                error=f"Execution error: {str(e)}",
+                error=f"Execution error: {err_msg}",
             )
         finally:
             # 清理临时文件
             if tmp_file.exists():
                 tmp_file.unlink()
+
+    def _parse_subprocess_output(
+        self,
+        output: str,
+        stderr_text: str,
+        return_code: int,
+        duration: float,
+        exec_id: str,
+    ) -> ToolResult:
+        """把 subprocess 输出解析成统一的 :class:`ToolResult`。
+
+        用于 async create_subprocess_exec 路径和 sync subprocess.run fallback 路径。
+        """
+        # 解析输出
+        if "__MACS_OUTPUT_START__" in output:
+            parts = output.split("__MACS_OUTPUT_START__")
+            user_output = parts[1].split("__MACS_ERROR_START__")[0].strip()
+            error_output = (
+                parts[1].split("__MACS_ERROR_START__")[1].strip()
+                if "__MACS_ERROR_START__" in parts[1]
+                else ""
+            )
+        else:
+            user_output = output
+            error_output = stderr_text
+
+        # 截断过长输出
+        if len(user_output) > self._max_output_size:
+            user_output = (
+                user_output[: self._max_output_size]
+                + f"\n... (truncated, total {len(user_output)} chars)"
+            )
+        if len(error_output) > self._max_output_size:
+            error_output = error_output[: self._max_output_size] + f"\n... (truncated)"
+
+        success = return_code == 0 and not error_output.strip()
+        return ToolResult(
+            success=success,
+            output=user_output if success else None,
+            error=error_output.strip() if error_output.strip() else None,
+            metadata={
+                "return_code": return_code,
+                "duration_ms": round(duration, 2),
+                "exec_id": exec_id,
+            },
+        )
 
 
 # Docker 版本 (更安全, 但需要 Docker)

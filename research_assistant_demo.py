@@ -15,6 +15,11 @@
 
 import asyncio
 import os
+
+# 跨平台强制 UTF-8 I/O（修 Windows cp936 中文乱码）
+from macs_pkg._compat import force_utf8_io
+force_utf8_io()
+
 from macs_pkg.runtime.engine import RuntimeEngine, RuntimeConfig
 from macs_pkg.core.agent import AgentRole
 from macs_pkg.llm import MiniMaxPlannerAgent, MiniMaxExecutorAgent, MiniMaxReviewerAgent
@@ -212,7 +217,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    import sys
-    # 设置 UTF-8 输出
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     asyncio.run(main())

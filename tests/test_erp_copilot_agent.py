@@ -250,8 +250,9 @@ async def test_run_tool_get_sales_velocity(copilot_no_nl2sql):
     result = await copilot_no_nl2sql.run_tool(
         "get_sales_velocity", product_id=1, days=30
     )
-    assert "row" in result
-    assert result["row"]["avg_daily_units"] == 1.0
+    assert "rows" in result
+    # get_sales_velocity returns a single-product dict; we wrap it as rows[0]
+    assert result["rows"][0]["avg_daily_units"] == 1.0
 
 
 @pytest.mark.asyncio

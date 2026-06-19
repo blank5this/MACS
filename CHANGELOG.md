@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2-erp-copilot] - 2026-06-18
+
+> 面向面试/简历的呈现层优化：修乱码 + 一键 demo + 真实 benchmark + 业务化重命名。
+> 测试: 381 passed (+84 benchmark), 11 failed (10 个预存 bug 与本改动无关)。
+
+### Added
+
+- **macs_pkg/_compat.py**: 新建 `force_utf8_io()` 工具，统一处理 Windows cp936 中文乱码
+  （设 `PYTHONUTF8=1` / `PYTHONIOENCODING=utf-8` + 重新配置 stdout/stderr）。
+- **examples/interview_demo.py**: 一行命令 `python examples/interview_demo.py` 跑通完整链路
+  （用户问题 → Planner → Tools/RAG/SQL → Reviewer → 报告），100% 复用 `erp_copilot_multi_agent.py`。
+  无 API key 用 `_NullProvider` 兜底。
+- **tests/benchmark/**: 新建 benchmark 套件，4 类可复现指标：
+  - `test_rag_recall.py`：20 中文问题，R@1=90% / R@3=100% / R@5=100% / MRR=0.933
+  - `test_sql_injection_fuzz.py`：50 payload 拒绝率 98.0% (PASS)
+  - `test_workflow_success.py`：10 题 × 真实 LLM 端到端成功率
+  - `test_latency.py`：P50/P95/P99 耗时分布
+  - 真实接 LLM（`requires_llm` marker），无 key 自动 skip，CI 友好
+- **Makefile**: 新增 `test-benchmark` / `test-benchmark-real` / `gen-benchmark-questions` 3 个 target
+- **README.md**: 标题改为「ERP AI Copilot：基于自研 MACS 多 Agent 框架的企业智能助手」
+- **career/**: `RESUME_PROJECT_HIRING.md` / `INTERVIEW_CHEATSHEET.md` 加业务名头注
+
+### Changed
+
+- **my_project.py**: 修 `sanitize_output()` 不再把中文压成 `?`（改用控制字符过滤 + `_CTRL_CHARS` 正则）
+- **app.py / agent_process_demo.py / research_assistant_demo.py**: 改用 `force_utf8_io()` 统一 UTF-8 设置
+- **macs_pkg/runtime/config.py**: 两处 `open()` 加 `encoding="utf-8"` + `ensure_ascii=False`
+- **macs_pkg/erp/rag/indexer.py**: GBK fallback 之前加 `logger.warning`（避免污染向量库静默）
+- **pyproject.toml**: `description` 改为业务导向；新增 `requires_llm` pytest marker
+
+### Not Changed (git 可追溯性)
+
+- 包名 `macs_pkg` 保留（避免破坏 import）
+- 8 篇 ADR / RELEASE_NOTES_v*.md / CHANGELOG 历史条目 全部保留
+
 ## [1.0.1-erp-copilot] - 2026-06-12
 
 > Bug fix release: 修复 v1.0.0 release notes 列出的 2 个代码问题 (LLM Planner 硬编码 prompt + RuntimeEngine 吞异常).

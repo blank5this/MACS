@@ -1,8 +1,11 @@
 <div align="center">
 
-# MACS — Multi-Agent Collaboration Stack
+# ERP AI Copilot：基于自研 MACS 多 Agent 框架的企业智能助手
 
-**Production-grade Python framework for building multi-agent AI systems — with a working ERP AI Copilot built on top.**
+**企业级 AI 助手：把自然语言变成可执行的 ERP 查询、知识库问答和多步决策。**
+
+> 内置自研的 **MACS**（Multi-Agent Collaboration Stack）多 Agent 协同框架作底座；
+> 本仓库同时承载该框架本身与「ERP AI Copilot」业务应用。
 
 [![Tests](https://img.shields.io/badge/tests-326%20passing-brightgreen.svg)](#-test-coverage)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)

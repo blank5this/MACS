@@ -1,6 +1,6 @@
 # 面试话术速查 — 甘凯锋
 
-> 围绕 **MACS + ERP AI Copilot** 准备。每题都遵循 STAR 法则（Situation → Task → Action → Result）。
+> 项目业务名：**ERP AI Copilot**（内部代号 MACS）。每题遵循 STAR 法则。
 
 ---
 

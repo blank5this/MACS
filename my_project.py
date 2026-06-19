@@ -11,7 +11,12 @@ MACS 多智能体协作系统 - 可运行项目模板
 
 import asyncio
 import os
+import re
 import sys
+
+# 强制 Windows 下 stdout/stderr 走 UTF-8（中文不乱码）
+from macs_pkg._compat import force_utf8_io
+force_utf8_io()
 
 # ==================== 配置区 ====================
 
@@ -154,15 +159,20 @@ async def main():
         print()
         print("[结果]")
         import json
+        # 只过滤控制字符，**保留所有 Unicode（含中文）**。
+        # 旧实现用 ascii 'replace' 会把中文压成 ?，是 Windows 乱码的根因之一。
+        _CTRL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
         def sanitize_output(obj):
             if isinstance(obj, str):
-                return obj.encode('ascii', errors='replace').decode('ascii')
+                return _CTRL_CHARS.sub("", obj)
             elif isinstance(obj, dict):
                 return {k: sanitize_output(v) for k, v in obj.items()}
             elif isinstance(obj, list):
                 return [sanitize_output(item) for item in obj]
             else:
                 return obj
+
         print(json.dumps(sanitize_output(result), ensure_ascii=False, indent=2))
         print()
 

@@ -208,6 +208,10 @@ class TestDuckDuckGoSearchTool:
 class TestPythonCodeExecutorTool:
     """Tests for PythonCodeExecutorTool."""
 
+    # Loop scope=function: PythonCodeExecutor spawns subprocesses via asyncio.create_subprocess_exec.
+    # pytest-asyncio in auto mode may reuse a session-level loop across tests, which can leave
+    # the executor's tmp file handles / Popen state in an inconsistent state. Forcing per-function
+    # loop isolation avoids flaky failures when other test modules run alongside.
     @pytest.fixture
     def tool(self):
         return PythonCodeExecutorTool(timeout=10)

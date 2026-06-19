@@ -25,9 +25,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# Force UTF-8 on Windows
-if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+# 跨平台强制 UTF-8 I/O（修 Windows cp936 中文乱码）
+from macs_pkg._compat import force_utf8_io
+force_utf8_io()
 
 import gradio as gr
 

@@ -283,27 +283,34 @@ class ERPCopilotAgent:
             from ..tools import inventory_tools as _tools  # type: ignore
 
         async def _t_get_inventory_levels(product_id=None, category=None):
-            return await _tools.get_inventory_levels(
+            rows = await _tools.get_inventory_levels(
                 self.pool, product_id=product_id, category=category
             )
+            return {"rows": rows, "rowcount": len(rows)}
 
         async def _t_get_low_stock_products(threshold=0):
-            return await _tools.get_low_stock_products(self.pool, threshold=threshold)
+            rows = await _tools.get_low_stock_products(self.pool, threshold=threshold)
+            return {"rows": rows, "rowcount": len(rows)}
 
         async def _t_get_supplier_price_history(product_id, days=180):
-            return await _tools.get_supplier_price_history(
+            rows = await _tools.get_supplier_price_history(
                 self.pool, product_id=product_id, days=days
             )
+            return {"rows": rows, "rowcount": len(rows)}
 
         async def _t_get_top_selling_products(start_date=None, end_date=None, limit=10):
-            return await _tools.get_top_selling_products(
+            rows = await _tools.get_top_selling_products(
                 self.pool, start_date=start_date, end_date=end_date, limit=limit
             )
+            return {"rows": rows, "rowcount": len(rows)}
 
         async def _t_get_sales_velocity(product_id, days=30):
-            return await _tools.get_sales_velocity(
+            # get_sales_velocity returns a single dict (one product), wrap as rows[0]
+            row = await _tools.get_sales_velocity(
                 self.pool, product_id=product_id, days=days
             )
+            rows = [row] if row else []
+            return {"rows": rows, "rowcount": len(rows)}
 
         self._agent.register_tool("get_inventory_levels", _t_get_inventory_levels)
         self._agent.register_tool("get_low_stock_products", _t_get_low_stock_products)

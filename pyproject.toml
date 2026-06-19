@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "macs_pkg"
 version = "0.2.0"
-description = "MACS - Multi-Agent Collaboration System for building intelligent agent applications"
+description = "ERP AI Copilot — 基于自研 MACS 多代理框架的企业级 AI 助手"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -103,4 +103,5 @@ asyncio_mode = "auto"
 addopts = "-v --tb=short"
 markers = [
     "integration: tests that need a live PostgreSQL instance (skipped if DB is unreachable)",
+    "requires_llm: tests that need a real LLM API key (skipped if ANTHROPIC_API_KEY/MINIMAX_API_KEY/... is unset)",
 ]

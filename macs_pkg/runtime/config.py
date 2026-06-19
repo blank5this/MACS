@@ -121,7 +121,7 @@ class ConfigManager:
             raise FileNotFoundError(f"Config file not found: {config_file}")
 
         import json
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
 
         self._apply_config(data)
@@ -224,8 +224,8 @@ class ConfigManager:
             config_file: Path to save to.
         """
         import json
-        with open(config_file, "w") as f:
-            json.dump(self._config.to_dict(), f, indent=2)
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(self._config.to_dict(), f, indent=2, ensure_ascii=False)
 
 
 # Global config manager instance
