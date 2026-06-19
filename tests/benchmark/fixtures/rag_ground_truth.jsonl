@@ -1,0 +1,27 @@
+{"id": "RAG-001", "question": "订单到现金的流程是什么？", "expected_doc_ids": ["01_operations/01_订单到现金流程.md"], "category": "01_operations", "doc_title": "订单到现金流程"}
+{"id": "RAG-002", "question": "OTC 流程", "expected_doc_ids": ["01_operations/01_订单到现金流程.md"], "category": "01_operations", "doc_title": "订单到现金流程"}
+{"id": "RAG-003", "question": "如何缩短采购 lead time？", "expected_doc_ids": ["01_operations/02_Lead_Time_策略.md"], "category": "01_operations", "doc_title": "Lead_Time_策略"}
+{"id": "RAG-004", "question": "Lead Time 优化策略", "expected_doc_ids": ["01_operations/02_Lead_Time_策略.md"], "category": "01_operations", "doc_title": "Lead_Time_策略"}
+{"id": "RAG-005", "question": "如何处理客户退货？", "expected_doc_ids": ["01_operations/03_退货处理流程.md"], "category": "01_operations", "doc_title": "退货处理流程"}
+{"id": "RAG-006", "question": "退货审批流程", "expected_doc_ids": ["01_operations/03_退货处理流程.md"], "category": "01_operations", "doc_title": "退货处理流程"}
+{"id": "RAG-007", "question": "客户信用如何评估？", "expected_doc_ids": ["01_operations/04_客户信用管理.md"], "category": "01_operations", "doc_title": "客户信用管理"}
+{"id": "RAG-008", "question": "信用额度管理", "expected_doc_ids": ["01_operations/04_客户信用管理.md"], "category": "01_operations", "doc_title": "客户信用管理"}
+{"id": "RAG-009", "question": "销售价格审批流程？", "expected_doc_ids": ["01_operations/05_销售价格管理.md"], "category": "01_operations", "doc_title": "销售价格管理"}
+{"id": "RAG-010", "question": "价格折扣管理", "expected_doc_ids": ["01_operations/05_销售价格管理.md"], "category": "01_operations", "doc_title": "销售价格管理"}
+{"id": "RAG-011", "question": "订单审批权限如何划分？", "expected_doc_ids": ["01_operations/06_订单审批流程.md"], "category": "01_operations", "doc_title": "订单审批流程"}
+{"id": "RAG-012", "question": "订单审批", "expected_doc_ids": ["01_operations/06_订单审批流程.md"], "category": "01_operations", "doc_title": "订单审批流程"}
+{"id": "RAG-013", "question": "什么是 ABC 分析法？", "expected_doc_ids": ["02_warehouse/01_ABC分析法.md"], "category": "02_warehouse", "doc_title": "ABC分析法"}
+{"id": "RAG-014", "question": "ABC 库存分类", "expected_doc_ids": ["02_warehouse/01_ABC分析法.md"], "category": "02_warehouse", "doc_title": "ABC分析法"}
+{"id": "RAG-015", "question": "循环盘点怎么做？", "expected_doc_ids": ["02_warehouse/02_循环盘点.md"], "category": "02_warehouse", "doc_title": "循环盘点"}
+{"id": "RAG-016", "question": "盘点频率", "expected_doc_ids": ["02_warehouse/02_循环盘点.md"], "category": "02_warehouse", "doc_title": "循环盘点"}
+{"id": "RAG-017", "question": "安全库存怎么算？", "expected_doc_ids": ["02_warehouse/03_安全库存公式.md"], "category": "02_warehouse", "doc_title": "安全库存公式"}
+{"id": "RAG-018", "question": "安全库存公式", "expected_doc_ids": ["02_warehouse/03_安全库存公式.md"], "category": "02_warehouse", "doc_title": "安全库存公式"}
+{"id": "RAG-019", "question": "过期物料如何处理？", "expected_doc_ids": ["02_warehouse/04_过期物料处理.md"], "category": "02_warehouse", "doc_title": "过期物料处理"}
+{"id": "RAG-020", "question": "呆滞料处理", "expected_doc_ids": ["02_warehouse/04_过期物料处理.md"], "category": "02_warehouse", "doc_title": "过期物料处理"}
+{"id": "RAG-021", "question": "供应商怎么评估打分？", "expected_doc_ids": ["03_procurement/01_供应商评估.md"], "category": "03_procurement", "doc_title": "供应商评估"}
+{"id": "RAG-022", "question": "供应商 KPI", "expected_doc_ids": ["03_procurement/01_供应商评估.md"], "category": "03_procurement", "doc_title": "供应商评估"}
+{"id": "RAG-023", "question": "RFQ 流程是怎样的？", "expected_doc_ids": ["03_procurement/02_RFQ_询报价流程.md"], "category": "03_procurement", "doc_title": "RFQ_询报价流程"}
+{"id": "RAG-024", "question": "询价单", "expected_doc_ids": ["03_procurement/02_RFQ_询报价流程.md"], "category": "03_procurement", "doc_title": "RFQ_询报价流程"}
+{"id": "RAG-025", "question": "什么是三方匹配？", "expected_doc_ids": ["03_procurement/03_三方匹配.md"], "category": "03_procurement", "doc_title": "三方匹配"}
+{"id": "RAG-026", "question": "3-way match", "expected_doc_ids": ["03_procurement/03_三方匹配.md"], "category": "03_procurement", "doc_title": "三方匹配"}
+

@@ -1,0 +1,67 @@
+# InventoryRiskWorkflow 测试题库（10 个真实业务问题）
+# 用于 test_workflow_success.py 和 test_latency.py
+
+questions:
+  - id: WF-01
+    question: 分析未来 30 天库存风险并给出采购建议
+    category: high_risk
+    expected_plan_steps: 4
+
+  - id: WF-02
+    question: 哪些 SKU 的库存低于安全库存线？
+    category: low_stock
+    expected_plan_steps: 3
+
+  - id: WF-03
+    question: 上个月销售排名前 10 的商品有哪些？
+    category: top_sellers
+    expected_plan_steps: 3
+
+  - id: WF-04
+    question: 评估所有供应商的交付准时率
+    category: supplier_perf
+    expected_plan_steps: 4
+
+  - id: WF-05
+    question: 哪些订单还未完成付款？金额是多少？
+    category: ar_aging
+    expected_plan_steps: 3
+
+  - id: WF-06
+    question: ABC 分析：A 类商品本月库存周转率
+    category: abc_analysis
+    expected_plan_steps: 3
+
+  - id: WF-07
+    question: 紧急采购订单的审批流程是什么？
+    category: policy_lookup
+    expected_plan_steps: 2
+
+  - id: WF-08
+    question: 库存周转率低于 4 的商品有哪些？
+    category: slow_moving
+    expected_plan_steps: 3
+
+  - id: WF-09
+    question: 退货率最高的 5 个 SKU 和对应供应商
+    category: returns
+    expected_plan_steps: 4
+
+  - id: WF-10
+    question: 期末结账的关键步骤和注意事项
+    category: finance_close
+    expected_plan_steps: 3
+
+# 故障注入场景（test_workflow_success.py 用）
+failure_scenarios:
+  - name: llm_slow
+    description: LLM 响应延迟（mock 注入 2 秒 sleep）
+    success_threshold: 0.6
+
+  - name: tool_failure
+    description: Tool 调用随机失败（30% 概率）
+    success_threshold: 0.5
+
+  - name: rag_empty
+    description: RAG 检索返回空结果
+    success_threshold: 0.4

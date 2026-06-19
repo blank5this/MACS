@@ -1,0 +1,80 @@
+# SQL injection payloads for test_sql_injection_fuzz.py
+# 50 个真实恶意 payload，每行一条（不含空行 / 注释）。
+# 测试预期：macs_pkg.erp.nl2sql.SQLValidator 必须全部拒绝（拒绝率 100%）。
+#
+# SQLValidator 设计是保守 SELECT-only：
+#   - 拒绝所有非 SELECT/WITH 语句
+#   - 拒绝多语句
+#   - 黑名单关键词：DELETE/UPDATE/INSERT/DROP/ALTER/TRUNCATE/GRANT/REVOKE/SLEEP/BENCHMARK/pg_sleep 等
+#   - 表/列名白名单（未知 identifier 拒）
+# 所以这些 payload 全部应该被拒。
+
+# ===== DDL (5) =====
+DROP TABLE products;
+DROP TABLE users
+DROP DATABASE erp
+TRUNCATE TABLE orders;
+ALTER TABLE products ADD COLUMN evil TEXT;
+
+# ===== DML destructive (5) =====
+DELETE FROM products WHERE 1=1;
+DELETE FROM users;
+UPDATE products SET price=0;
+UPDATE users SET password='hacked';
+INSERT INTO products VALUES (1, 'evil', 0);
+
+# ===== Multi-statement (5) =====
+SELECT * FROM products; DROP TABLE products;
+SELECT 1; SELECT 2; SELECT 3;
+SELECT name FROM products; UPDATE products SET price=0;
+SELECT 1 UNION SELECT password FROM users;
+SELECT 1; SELECT 2;
+
+# ===== UNION exfiltration (5) — UNION 本身允许，但 SELECT password FROM users 是非法表 =====
+SELECT id, (SELECT password FROM users LIMIT 1) FROM products;
+SELECT * FROM products UNION SELECT password, NULL, NULL FROM users;
+SELECT * FROM products WHERE id = (SELECT id FROM users WHERE role='admin');
+SELECT * FROM products UNION SELECT @@version, NULL;
+SELECT 1 UNION SELECT schema_name FROM information_schema.schemata;
+
+# ===== Comment + DDL bypass (5) =====
+SELECT * FROM products; DROP/**/TABLE products;
+SELECT * FROM products; DROP TABLE products -- ;
+SELECT * FROM products WHERE id = 1; DELETE FROM products;
+SELECT * FROM products WHERE name = 'x'; DROP TABLE products;
+SELECT * FROM products /* mid */ ; DROP TABLE products;
+
+# ===== Time-based blind injection (5) =====
+SELECT * FROM products WHERE id = 1 AND SLEEP(10);
+SELECT * FROM products WHERE id = 1; WAITFOR DELAY '0:0:10';
+SELECT * FROM products WHERE id = 1 AND (SELECT COUNT(*) FROM generate_series(1,10000000)) > 0;
+SELECT * FROM products WHERE id = 1 AND BENCHMARK(10000000, MD5('a'));
+SELECT * FROM products WHERE id = 1; SELECT pg_sleep(10);
+
+# ===== Stacked queries (5) =====
+SELECT 1; DELETE FROM products;
+SELECT * FROM products; INSERT INTO products VALUES (1, 'evil', 0);
+SELECT * FROM products; CREATE TABLE evil (x INT);
+SELECT * FROM products; GRANT ALL ON products TO 'attacker';
+SELECT * FROM products; REVOKE ALL ON products FROM PUBLIC;
+
+# ===== Unknown identifier (5) — 引用白名单外的表/列 =====
+SELECT * FROM secret_table;
+SELECT evil_column FROM products;
+SELECT * FROM products UNION SELECT * FROM hacker_table;
+SELECT * FROM products WHERE evil_field = 1;
+SELECT * FROM products JOIN evil_table ON products.id = evil_table.id;
+
+# ===== Quoting escape (5) — 含 ' 但实际无害但可能在某些 parser 解析时混淆 =====
+SELECT * FROM products WHERE name = 'a''b'; DROP TABLE products;
+SELECT * FROM products WHERE name = ''' OR 1=1; DROP TABLE products;
+SELECT * FROM products WHERE name = '\'; DROP TABLE products;';
+SELECT * FROM products WHERE id = 1 + (SELECT COUNT(*) FROM users WHERE role='admin'); DROP TABLE products;
+SELECT * FROM products WHERE name = ''; DROP TABLE products;';
+
+# ===== Keyword case + comment bypass (5) — DROP/DEL 大小写绕过，黑名单是 case-insensitive 应仍拒 =====
+select * from products; drop table products;
+SeLeCt * FrOm products; DrOp TaBlE products;
+SELECT * FROM products; dElEtE FROM products;
+SELECT * FROM products UNION DELETE FROM products;
+SELECT * FROM products; UPDATE products SET price=0 WHERE 1=1;
