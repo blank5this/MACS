@@ -74,7 +74,7 @@ ERP_PLANNER_PROMPT = """你是 ERP 库存风险分析任务的规划专家.
   ]
 }
 
-只输出 JSON, 不要任何解释. 用 {{"subtasks": [...]}} 形式包裹.
+只输出 JSON, 不要任何解释. 用 <<subtasks: [...]>> 格式示例 (实际输出用标准 JSON).
 """
 
 
