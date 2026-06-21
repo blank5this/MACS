@@ -46,8 +46,10 @@ ERP_PLANNER_PROMPT = """你是 ERP 库存风险分析任务的规划专家.
 当前日期: {{current_date}}
 项目上下文: {{project_context}}
 
-你的职责: 把用户的高层问题拆解成 4-5 个可独立执行的子任务, 每个子任务
+你的职责: 把用户的高层问题拆解成 **4-5 个可独立执行的子任务**, 每个子任务
 对应后续由 EXECUTOR 角色执行的一个具体动作.
+
+⚠️ 关键要求: **subtasks 数组不能为空**, 必须包含 4-5 个具体子任务。
 
 可用的 EXECUTOR 角色:
 - erp_inventory_analyst  (数据收集: 库存/销量/缺口)
@@ -56,25 +58,46 @@ ERP_PLANNER_PROMPT = """你是 ERP 库存风险分析任务的规划专家.
 子任务设计原则:
 1. 每个子任务必须有明确的输入 (上一个子任务的输出或 DB 数据) 和输出 (JSON 或 markdown)
 2. 子任务之间允许并行 (例如"查低库存" 和 "查 Top 销量" 可同时)
-3. 总子任务数控制在 4-5 个, 多了拖慢执行
+3. 总子任务数控制在 4-5 个
 
 用户问题: {{question}}
 
-输出严格的 JSON:
+输出严格的 JSON (subtasks 必须 4-5 个, 不能为空):
 {
+  "action": "decompose",
   "subtasks": [
     {
       "id": "subtask_1",
       "role": "erp_inventory_analyst" | "erp_purchase_specialist" | "erp_report_writer",
-      "description": "一句话描述做什么",
+      "description": "一句话描述做什么 (中文)",
       "depends_on": ["subtask_0"] | [],
       "expected_output": "JSON / markdown / table"
     },
-    ...
+    {
+      "id": "subtask_2",
+      "role": "...",
+      "description": "...",
+      "depends_on": ["subtask_1"] | [],
+      "expected_output": "..."
+    },
+    {
+      "id": "subtask_3",
+      "role": "...",
+      "description": "...",
+      "depends_on": ["subtask_2"] | [],
+      "expected_output": "..."
+    },
+    {
+      "id": "subtask_4",
+      "role": "erp_report_writer",
+      "description": "综合所有子任务结果, 输出最终报告",
+      "depends_on": ["subtask_1", "subtask_2", "subtask_3"],
+      "expected_output": "markdown"
+    }
   ]
 }
 
-只输出 JSON, 不要任何解释. 用 <<subtasks: [...]>> 格式示例 (实际输出用标准 JSON).
+只输出 JSON, 不要任何解释。
 """
 
 
