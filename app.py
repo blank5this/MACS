@@ -1,7 +1,8 @@
-"""Gradio wrapper for the ERP AI Copilot — 2-tab live demo.
+"""Gradio wrapper for the ERP AI Copilot — 3-tab live demo.
 
-Tab 1 (📚 政策问答)  — RAG over 18 Chinese policy docs (no DB needed)
-Tab 2 (📊 Text2SQL)   — natural language → safe SQL → SQLite (auto-seeded on first run)
+Tab 1 (📚 政策问答)     — RAG over 18 Chinese policy docs (no DB needed)
+Tab 2 (📊 Text2SQL)      — natural language → safe SQL → SQLite (auto-seeded on first run)
+Tab 3 (🚀 Multi-Agent)   — Full Planner→Tools→Reviewer pipeline (auto-runs on startup)
 
 Run locally::
 
@@ -11,8 +12,8 @@ Run locally::
 
 Deploy: this file is the entry point for HF Spaces / Render / any Gradio host.
 Set MINIMAX_API_KEY (or ANTHROPIC_API_KEY) in the host's env / secrets.
-Without a key, both tabs fall back to a deterministic mode so the demo
-still shows the retrieval and query execution layers.
+Without a key, all tabs fall back to a deterministic mode so the demo
+still shows the retrieval, query, and pipeline layers.
 """
 from __future__ import annotations
 
@@ -229,6 +230,81 @@ def ask_sql_sync(question: str) -> tuple[str, str, str]:
 
 
 # ============================================================================
+# Tab 3 — Multi-Agent End-to-End Demo (Planner → Tools → Reviewer)
+# ============================================================================
+
+DEFAULT_AGENT_QUESTION = "分析未来 30 天库存风险并给出采购建议"
+
+
+def run_multi_agent_demo(question: str) -> tuple[str, str, str]:
+    """跑完整多 agent 链路。返回 (链路摘要, 报告 markdown, trace JSON 摘要)。"""
+    if not question.strip():
+        question = DEFAULT_AGENT_QUESTION
+    # 复用 examples/interview_demo.py 的 run_interview（不重写）
+    from examples.interview_demo import run_interview
+    from pathlib import Path
+
+    try:
+        result, latency_ms = asyncio.run(run_interview(question=question))
+    except Exception as exc:
+        return (
+            f"❌ 启动失败: {exc.__class__.__name__}: {exc}\n\n"
+            "(检查 .env 里的 MINIMAX_API_KEY / ANTHROPIC_API_KEY，或直接打开 http://localhost:7860 看 mock 模式)",
+            "",
+            "",
+        )
+
+    plan = result.get("plan")
+    analyses = result.get("analyses") or []
+    recs = result.get("purchase_recs") or []
+    final = result.get("final_report") or ""
+    success = result.get("success")
+    error = result.get("error")
+
+    summary = (
+        f"**链路**：用户问题 → Planner → Tools/RAG/SQL → Reviewer → 报告\n\n"
+        f"**节点状态**：\n"
+        f"- [1/5] Planner   : {'✓' if plan else '✗'}  "
+        f"(steps={len(plan.get('steps') or []) if isinstance(plan, dict) else 0})\n"
+        f"- [2/5] Tools/RAG : {'✓' if analyses else '✗'}  "
+        f"(analyses={len(analyses) if isinstance(analyses, list) else 'n/a'})\n"
+        f"- [3/5] SQL       : {'✓' if recs else '✗'}  "
+        f"(purchase_recs={len(recs) if isinstance(recs, list) else 'n/a'})\n"
+        f"- [4/5] Reviewer  : {'✓' if final else '✗'}  "
+        f"(final_report={len(final)} 字符)\n"
+        f"- [5/5] 报告落盘  : ✓  (`examples/output/inventory_risk_report.md`)\n\n"
+        f"**耗时**：{latency_ms:.0f}ms\n\n"
+        f"**成功**：{'✓ ' + str(success) if success else '✗ ' + str(error)}"
+    )
+
+    # 报告：如果是 JSON 嵌套就提示；否则原样展示
+    report_md = final if final else "_(报告为空)_"
+    if final and final.lstrip().startswith("{"):
+        report_md = (
+            "> ⚠️ 当前 LLM 在 review 阶段返回了结构化 JSON 报文，"
+            "demo 已落盘但**未自动渲染为 Markdown**。\n\n"
+            "<details><summary>点击展开 raw JSON（截断 3000 字符）</summary>\n\n"
+            "```json\n" + final[:3000] + "\n```\n\n</details>\n"
+        )
+
+    # trace 摘要：4 个关键字段
+    trace_md = (
+        f"```json\n{{\n"
+        f'  "success": {str(success).lower()},\n'
+        f'  "elapsed_ms": {result.get("elapsed_ms", 0)},\n'
+        f'  "question": "{result.get("question", "")[:50]}",\n'
+        f'  "final_report_chars": {len(final)},\n'
+        f'  "plan": {"<dict>" if plan else "None"},\n'
+        f'  "analyses": {len(analyses) if isinstance(analyses, list) else "n/a"},\n'
+        f'  "purchase_recs": {len(recs) if isinstance(recs, list) else "n/a"}\n'
+        f"}}\n```\n\n"
+        f"完整 trace JSON 落盘到 `examples/output/inventory_risk_trace.json`"
+    )
+
+    return summary, report_md, trace_md
+
+
+# ============================================================================
 # Gradio UI
 # ============================================================================
 
@@ -310,6 +386,40 @@ Built on [MACS (Multi-Agent Collaboration Stack)](https://github.com/blank5this/
                     outputs=[sql_out_answer, sql_out_sql, sql_out_rows],
                 )
 
+            with gr.Tab("🚀 Multi-Agent Demo"):
+                gr.Markdown(
+                    "**完整 5 节点链路** (Planner → Tools/RAG/SQL → Reviewer → 报告) — "
+                    "基于自研 **MACS** 多 Agent 框架。\n\n"
+                    "无 API key 也能跑：`_NullProvider` 兜底，6ms 出结构化演示。"
+                )
+                agent_in = gr.Textbox(
+                    label="业务问题",
+                    value=DEFAULT_AGENT_QUESTION,
+                    placeholder=DEFAULT_AGENT_QUESTION,
+                    lines=2,
+                )
+                agent_btn = gr.Button("🚀 Run Multi-Agent Demo", variant="primary")
+                agent_out_summary = gr.Markdown(label="链路摘要")
+                agent_out_report = gr.Markdown(label="最终报告")
+                agent_out_trace = gr.Markdown(label="Trace 摘要")
+                gr.Examples(
+                    examples=[
+                        [DEFAULT_AGENT_QUESTION],
+                        ["哪些 SKU 的库存低于安全库存线？"],
+                        ["上个月销售排名前 10 的商品有哪些？"],
+                        ["评估所有供应商的交付准时率"],
+                    ],
+                    inputs=agent_in,
+                    label="Example 业务问题 (click to load)",
+                )
+                agent_btn.click(
+                    fn=run_multi_agent_demo,
+                    inputs=agent_in,
+                    outputs=[agent_out_summary, agent_out_report, agent_out_trace],
+                )
+                # 注：Gradio 6 startup-events 不允许慢函数（>5s），会 502
+                # 不在 demo.load 触发，改为打开页面后用户点按钮启动
+
         gr.Markdown(
             """
 ---
@@ -325,7 +435,7 @@ demo = _build_ui()
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  ERP AI Copilot — Gradio Demo (2 tabs)")
+    print("  ERP AI Copilot — Gradio Demo (3 tabs)")
     print("=" * 60)
     print(f"  KB dir:      {KB_DIR}  (exists={KB_DIR.exists()})")
     print(f"  Provider:    "
@@ -335,4 +445,7 @@ if __name__ == "__main__":
     asyncio.run(_get_rag())
     init_db()
     print("[init] Pre-warm complete. Launching UI on :7860 …")
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(
+        server_name="127.0.0.1",
+        server_port=7860,
+    )
