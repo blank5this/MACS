@@ -126,25 +126,61 @@ def _try_parse_json(text: str) -> Optional[Any]:
 
 
 def _render_report_md(final_report: str) -> str:
-    """把 final_report 渲染成可读 Markdown。
+    """只显示 LLM 的业务结论纯文本，**不**渲染 JSON 嵌套结构。
 
     策略:
-    - 是 JSON → _render_value 完整渲染为可读 Markdown（嵌套列表）
-    - 是 prose → 原样展示
-    - 完整 raw 字符串折叠在 <details> 供深度查看
-
-    注：早期版本尝试"取 first sentence / 取 final_output 字段"等多种裁剪，
-    但 LLM 输出格式不可预测（有时"如何做"在前、"结论"在后、有时是 markdown
-    step、有时是嵌套 JSON 字符串嵌入），裁剪总抓错。
-    最终方案：显示完整 final_report，让 LLM 自决定输出格式。
-    用户可在 input 框写"请用一句话总结"让 LLM 输出简短。
+    1. final_report 是 JSON → 提取 final_output 字段（LLM 写的 prose），
+       原样显示（不再 _render_value 渲染为列表）
+    2. final_report 是 prose → 原样显示
+    3. 完整 raw 字符串折叠在 <details>
     """
     if not final_report:
         return "_(报告为空)_"
     parsed = _try_parse_json(final_report)
     if parsed is None:
-        return final_report
-    return _render_value(parsed)
+        return final_report  # prose
+    # 提取 LLM 业务结论的 prose
+    prose = _extract_prose(parsed)
+    return prose or final_report
+
+
+def _extract_prose(parsed: Any, max_depth: int = 15) -> Optional[str]:
+    """递归找 LLM 的 prose 结论（final_output / summary / recommendations）。
+
+    **收集所有** final_output，取**最长**（业务结论通常在 purchase_specialist
+    详细分析里，inventory_analyst 那段是"如何做"开场较短）。
+    """
+    if max_depth <= 0:
+        return None
+    found: list[str] = []
+
+    def _walk(obj: Any, depth: int) -> None:
+        if depth <= 0:
+            return
+        if isinstance(obj, dict):
+            # 跳过 reviewer 类 agent
+            agent = obj.get("agent", "")
+            if isinstance(agent, str) and any(
+                kw in agent.lower() for kw in ("reviewer", "report_writer", "review")
+            ):
+                return
+            for k, v in obj.items():
+                if k in ("final_output", "summary", "conclusion", "answer",
+                         "recommendations", "next_actions", "report", "content"):
+                    if isinstance(v, str) and len(v.strip()) >= 20:
+                        found.append(v.strip())
+                        # 不 early return — 收集所有
+            for v in obj.values():
+                _walk(v, depth - 1)
+        elif isinstance(obj, list):
+            for item in obj:
+                _walk(item, depth - 1)
+
+    _walk(parsed, max_depth)
+    if not found:
+        return None
+    # 取最长（purchase_specialist 业务分析通常最长）
+    return max(found, key=len)
 
 
 

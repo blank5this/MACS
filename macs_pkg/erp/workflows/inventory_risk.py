@@ -363,6 +363,8 @@ def _parse_stages(
     agents' own memory buffers.
     """
     # 1. Final report = last agent's output (reviewer).
+    # 优先提取 LLM 的 prose 结论（final_output 字段），不直接 json.dumps 整个 dict
+    # —— 否则 UI 上会看到嵌套 JSON 结构（agent 内部通信），不是业务结论。
     final_report: Optional[str] = None
     if isinstance(raw_result, str):
         final_report = raw_result
@@ -374,8 +376,13 @@ def _parse_stages(
                 final_report = v
                 break
         if final_report is None:
-            # Fall back to stringified dict
-            final_report = json.dumps(raw_result, ensure_ascii=False, indent=2)
+            # 递归找 prose：跳过 reviewer，收集所有 final_output，取最长
+            prose = _extract_prose_from_dict(raw_result)
+            if prose:
+                final_report = prose
+            else:
+                # 真的没 prose 字段，fallback 整个 dict 序列化
+                final_report = json.dumps(raw_result, ensure_ascii=False, indent=2)
     elif raw_result is not None:
         final_report = str(raw_result)
 
@@ -388,6 +395,43 @@ def _parse_stages(
     purchase_recs = _agent_last_assistant(runtime, "erp_purchase_specialist")
 
     return plan, analyses, purchase_recs, final_report
+
+
+# ===== Prose extraction ============================================
+
+def _extract_prose_from_dict(obj: Any, max_depth: int = 15) -> Optional[str]:
+    """递归找 LLM 的 prose 结论（final_output / summary 等字段）。
+
+    - 跳过 reviewer 类 agent（其 final_output 是 review 思考链）
+    - 收集所有 final_output 字段
+    - 取**最长**（业务分析通常在 purchase_specialist）
+    """
+    if max_depth <= 0:
+        return None
+    found: list[str] = []
+
+    def _walk(o: Any, depth: int) -> None:
+        if depth <= 0:
+            return
+        if isinstance(o, dict):
+            agent = o.get("agent", "")
+            if isinstance(agent, str) and any(
+                kw in agent.lower() for kw in ("reviewer", "report_writer", "review")
+            ):
+                return
+            for k, v in o.items():
+                if k in ("final_output", "summary", "conclusion", "answer",
+                         "recommendations", "next_actions", "report", "content"):
+                    if isinstance(v, str) and len(v.strip()) >= 20:
+                        found.append(v.strip())
+            for v in o.values():
+                _walk(v, depth - 1)
+        elif isinstance(o, list):
+            for item in o:
+                _walk(item, depth - 1)
+
+    _walk(obj, max_depth)
+    return max(found, key=len) if found else None
 
 
 def _agent_last_assistant(
