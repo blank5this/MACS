@@ -126,15 +126,73 @@ def _try_parse_json(text: str) -> Optional[Any]:
 
 
 def _render_report_md(final_report: str) -> str:
-    """把 final_report 渲染成可读 Markdown。LLM 返回 raw JSON 时自动解析。"""
+    """把 final_report 渲染成可读 Markdown。LLM 返回 raw JSON 时只显示关键结论，
+    完整 JSON 折叠在 details 里供深度查看。"""
     if not final_report:
         return "_(报告为空)_"
     parsed = _try_parse_json(final_report)
     if parsed is None:
         # 真就是纯文本报告，原样展示
         return final_report
-    # JSON → Markdown
-    return _render_value(parsed)
+
+    # 智能提取"用户能看到的结果"（final_output / summary / recommendations 等）
+    key = _extract_key_content(parsed)
+    full_md = _render_value(parsed)
+
+    if key and key != full_md.strip():
+        # 主显示关键结论 + 折叠完整 JSON
+        return (
+            f"{key}\n\n"
+            f"<details><summary>📂 展开完整 agent 通信（{len(full_md)} 字符）</summary>\n\n"
+            f"```\n{full_md}\n```\n\n"
+            f"</details>"
+        )
+    # 没找到关键结论字段，全文显示
+    return full_md
+
+
+def _extract_key_content(parsed: Any, max_depth: int = 15) -> Optional[str]:
+    """递归找 LLM 的自然语言结论字段。
+
+    启发式:
+    1. 跳过 reviewer agent 的结果（agent 名字含 "reviewer" / "report_writer"）—— 这些是内部审稿意见
+    2. 优先匹配 priority_keys (final_output / summary / recommendations 等)
+    3. **多个 final_output 同时存在时取第一个非 reviewer 的**（业务执行链的结论）
+    4. 找不到则返回 None，fallback 到完整 JSON 渲染
+    """
+    if max_depth <= 0:
+        return None
+
+    found: list[str] = []
+
+    def _walk(obj: Any, depth: int) -> None:
+        if depth <= 0 or found:
+            return
+        if isinstance(obj, dict):
+            agent = obj.get("agent", "")
+            if isinstance(agent, str) and any(
+                kw in agent.lower() for kw in ("reviewer", "report_writer", "review")
+            ):
+                return  # 跳过 reviewer
+            for k, v in obj.items():
+                if k in ("final_output", "final_answer", "final_result",
+                         "summary", "conclusion", "answer",
+                         "recommendations", "recommendation", "next_actions",
+                         "report", "content"):
+                    if isinstance(v, str):
+                        s = v.strip()
+                        if len(s) >= 50:
+                            found.append(s)
+                            return
+            for v in obj.values():
+                _walk(v, depth - 1)
+        elif isinstance(obj, list):
+            for item in obj:
+                _walk(item, depth - 1)
+
+    _walk(parsed, max_depth)
+    return found[0] if found else None
+
 
 
 # ===== HTML 渲染 =====================================================
